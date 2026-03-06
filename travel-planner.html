@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wanderlist - Your Travel Companion</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF6B35;
+            --secondary: #004E89;
+            --accent: #F7B801;
+            --dark: #1A1A2E;
+            --light: #F8F9FA;
+            --success: #06D6A0;
+            --gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Space Mono', monospace;
+            background: var(--dark);
+            color: var(--light);
+            overflow-x: hidden;
+        }
+
+        .app-container {
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Animated background */
+        .bg-pattern {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(246, 92, 139, 0.1) 0%, transparent 50%);
+            animation: float 20s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(20px, -20px); }
+        }
+
+        /* Header */
+        header {
+            background: rgba(26, 26, 46, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1.5rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 3px solid var(--primary);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'Playfair Display', serif;
+            font-size: 2rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -1px;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: 2px solid var(--primary);
+            background: transparent;
+            color: var(--light);
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            background: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 53, 0.4);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-secondary {
+            border-color: var(--accent);
+        }
+
+        .btn-secondary:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        /* Main Content */
+        .main-content {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+        }
+
+        /* Login/Signup Form */
+        .auth-container {
+            max-width: 500px;
+            margin: 4rem auto;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 2px solid var(--primary);
+            border-radius: 0;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .auth-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            text-align: center;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--accent);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            color: var(--light);
+            font-family: 'Space Mono', monospace;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .auth-toggle {
+            text-align: center;
+            margin-top: 1.5rem;
+            color: var(--light);
+        }
+
+        .auth-toggle button {
+            background: none;
+            border: none;
+            color: var(--accent);
+            cursor: pointer;
+            text-decoration: underline;
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+        }
+
+        /* Dashboard */
+        .dashboard {
+            animation: fadeIn 0.6s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .dashboard-header {
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+
+        .dashboard-header h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 1rem 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            color: var(--light);
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+        }
+
+        .tab.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(255, 107, 53, 0.4);
+        }
+
+        .tab:hover:not(.active) {
+            border-color: var(--primary);
+            background: rgba(255, 107, 53, 0.1);
+        }
+
+        /* Packing Lists */
+        .packing-lists-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 2rem;
+        }
+
+        .packing-list-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 2px solid var(--primary);
+            padding: 2rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .packing-list-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+        }
+
+        .packing-list-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(255, 107, 53, 0.3);
+            border-color: var(--accent);
+        }
+
+        .list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .list-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            color: var(--accent);
+        }
+
+        .list-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .checkbox {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--primary);
+            cursor: pointer;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .checkbox.checked {
+            background: var(--primary);
+        }
+
+        .checkbox.checked::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: bold;
+        }
+
+        .item-text {
+            flex: 1;
+        }
+
+        .item-text.checked {
+            text-decoration: line-through;
+            opacity: 0.5;
+        }
+
+        .delete-btn {
+            background: none;
+            border: none;
+            color: var(--primary);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0.25rem 0.5rem;
+            opacity: 0.5;
+            transition: opacity 0.3s ease;
+        }
+
+        .delete-btn:hover {
+            opacity: 1;
+        }
+
+        .add-item-form {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .add-item-form input {
+            flex: 1;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            color: var(--light);
+            font-family: 'Space Mono', monospace;
+        }
+
+        .add-item-form input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .add-item-form button {
+            padding: 0.75rem 1.5rem;
+            background: var(--success);
+            border: none;
+            color: white;
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .add-item-form button:hover {
+            background: #05c596;
+            transform: translateY(-2px);
+        }
+
+        .create-list-btn {
+            width: 100%;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed var(--primary);
+            color: var(--primary);
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .create-list-btn:hover {
+            background: rgba(255, 107, 53, 0.1);
+            transform: translateY(-3px);
+        }
+
+        /* Bucket List / Map */
+        .map-container {
+            height: 600px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid var(--primary);
+            margin-bottom: 2rem;
+            position: relative;
+        }
+
+        .places-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .place-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .place-card.visited {
+            border-color: var(--success);
+        }
+
+        .place-card.bucket {
+            border-color: var(--accent);
+        }
+
+        .place-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(255, 255, 255, 0.1);
+        }
+
+        .place-name {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+            color: var(--light);
+        }
+
+        .place-status {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .place-status.visited {
+            background: var(--success);
+            color: white;
+        }
+
+        .place-status.bucket {
+            background: var(--accent);
+            color: var(--dark);
+        }
+
+        .add-place-form {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid var(--primary);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .add-place-form h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: var(--accent);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .toggle-group {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .toggle-btn {
+            flex: 1;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            color: var(--light);
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-btn.active {
+            background: var(--success);
+            border-color: var(--success);
+        }
+
+        /* AI Chat (placeholder for future) */
+        .ai-chat-container {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid var(--primary);
+            padding: 2rem;
+            text-align: center;
+            min-height: 400px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .ai-chat-container h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: var(--accent);
+        }
+
+        .ai-chat-container p {
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 2rem;
+        }
+
+        .token-info {
+            background: rgba(247, 184, 1, 0.1);
+            border: 2px solid var(--accent);
+            padding: 1rem 2rem;
+            display: inline-block;
+            font-weight: 700;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .logo {
+                font-size: 1.5rem;
+            }
+
+            .dashboard-header h1 {
+                font-size: 2.5rem;
+            }
+
+            .packing-lists-container,
+            .places-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Mock data storage (in production, this would be a backend database)
+        const LOCAL_STORAGE_KEY = 'wanderlist_data';
+
+        function App() {
+            const [isLoggedIn, setIsLoggedIn] = useState(false);
+            const [isSignUp, setIsSignUp] = useState(false);
+            const [currentUser, setCurrentUser] = useState(null);
+            const [activeTab, setActiveTab] = useState('packing');
+            const [packingLists, setPackingLists] = useState([]);
+            const [places, setPlaces] = useState([]);
+
+            // Load data from localStorage on mount
+            useEffect(() => {
+                const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (savedData) {
+                    const data = JSON.parse(savedData);
+                    setIsLoggedIn(data.isLoggedIn || false);
+                    setCurrentUser(data.currentUser || null);
+                    setPackingLists(data.packingLists || []);
+                    setPlaces(data.places || []);
+                }
+            }, []);
+
+            // Save data to localStorage whenever it changes
+            useEffect(() => {
+                const data = {
+                    isLoggedIn,
+                    currentUser,
+                    packingLists,
+                    places
+                };
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+            }, [isLoggedIn, currentUser, packingLists, places]);
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                const email = e.target.email.value;
+                setCurrentUser({ email });
+                setIsLoggedIn(true);
+            };
+
+            const handleLogout = () => {
+                setIsLoggedIn(false);
+                setCurrentUser(null);
+            };
+
+            const createPackingList = () => {
+                const listName = prompt('Enter packing list name (e.g., "Beach Vacation", "Business Trip"):');
+                if (listName) {
+                    const newList = {
+                        id: Date.now(),
+                        name: listName,
+                        items: []
+                    };
+                    setPackingLists([...packingLists, newList]);
+                }
+            };
+
+            const addItemToList = (listId, itemName) => {
+                setPackingLists(packingLists.map(list => {
+                    if (list.id === listId) {
+                        return {
+                            ...list,
+                            items: [...list.items, { id: Date.now(), name: itemName, checked: false }]
+                        };
+                    }
+                    return list;
+                }));
+            };
+
+            const toggleItem = (listId, itemId) => {
+                setPackingLists(packingLists.map(list => {
+                    if (list.id === listId) {
+                        return {
+                            ...list,
+                            items: list.items.map(item => 
+                                item.id === itemId ? { ...item, checked: !item.checked } : item
+                            )
+                        };
+                    }
+                    return list;
+                }));
+            };
+
+            const deleteItem = (listId, itemId) => {
+                setPackingLists(packingLists.map(list => {
+                    if (list.id === listId) {
+                        return {
+                            ...list,
+                            items: list.items.filter(item => item.id !== itemId)
+                        };
+                    }
+                    return list;
+                }));
+            };
+
+            const deleteList = (listId) => {
+                if (confirm('Are you sure you want to delete this packing list?')) {
+                    setPackingLists(packingLists.filter(list => list.id !== listId));
+                }
+            };
+
+            const addPlace = (placeName, visited) => {
+                const newPlace = {
+                    id: Date.now(),
+                    name: placeName,
+                    visited: visited,
+                    dateAdded: new Date().toISOString()
+                };
+                setPlaces([...places, newPlace]);
+            };
+
+            const togglePlaceStatus = (placeId) => {
+                setPlaces(places.map(place => 
+                    place.id === placeId ? { ...place, visited: !place.visited } : place
+                ));
+            };
+
+            const deletePlace = (placeId) => {
+                if (confirm('Are you sure you want to delete this place?')) {
+                    setPlaces(places.filter(place => place.id !== placeId));
+                }
+            };
+
+            if (!isLoggedIn) {
+                return (
+                    <div className="app-container">
+                        <div className="bg-pattern"></div>
+                        <header>
+                            <div className="header-content">
+                                <div className="logo">Wanderlist</div>
+                            </div>
+                        </header>
+                        <div className="main-content">
+                            <div className="auth-container">
+                                <h2 className="auth-title">{isSignUp ? 'Join Wanderlist' : 'Welcome Back'}</h2>
+                                <form onSubmit={handleLogin}>
+                                    <div className="form-group">
+                                        <label>Email</label>
+                                        <input type="email" name="email" required />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Password</label>
+                                        <input type="password" name="password" required />
+                                    </div>
+                                    <button type="submit" className="btn btn-primary" style={{width: '100%', marginTop: '1rem'}}>
+                                        {isSignUp ? 'Sign Up' : 'Log In'}
+                                    </button>
+                                </form>
+                                <div className="auth-toggle">
+                                    {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
+                                    <button onClick={() => setIsSignUp(!isSignUp)}>
+                                        {isSignUp ? 'Log In' : 'Sign Up'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="app-container">
+                    <div className="bg-pattern"></div>
+                    <header>
+                        <div className="header-content">
+                            <div className="logo">Wanderlist</div>
+                            <div className="nav-buttons">
+                                <span style={{color: 'var(--accent)', marginRight: '1rem', alignSelf: 'center'}}>
+                                    {currentUser?.email}
+                                </span>
+                                <button className="btn" onClick={handleLogout}>Logout</button>
+                            </div>
+                        </div>
+                    </header>
+                    <div className="main-content">
+                        <div className="dashboard">
+                            <div className="dashboard-header">
+                                <h1>Your Travel Hub</h1>
+                            </div>
+
+                            <div className="tabs">
+                                <button 
+                                    className={`tab ${activeTab === 'packing' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('packing')}
+                                >
+                                    Packing Lists
+                                </button>
+                                <button 
+                                    className={`tab ${activeTab === 'places' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('places')}
+                                >
+                                    Bucket List & Visited
+                                </button>
+                                <button 
+                                    className={`tab ${activeTab === 'ai' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('ai')}
+                                >
+                                    AI Travel Assistant
+                                </button>
+                            </div>
+
+                            {activeTab === 'packing' && (
+                                <PackingListsView 
+                                    lists={packingLists}
+                                    onCreateList={createPackingList}
+                                    onAddItem={addItemToList}
+                                    onToggleItem={toggleItem}
+                                    onDeleteItem={deleteItem}
+                                    onDeleteList={deleteList}
+                                />
+                            )}
+
+                            {activeTab === 'places' && (
+                                <PlacesView 
+                                    places={places}
+                                    onAddPlace={addPlace}
+                                    onToggleStatus={togglePlaceStatus}
+                                    onDeletePlace={deletePlace}
+                                />
+                            )}
+
+                            {activeTab === 'ai' && (
+                                <AIAssistantView />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function PackingListsView({ lists, onCreateList, onAddItem, onToggleItem, onDeleteItem, onDeleteList }) {
+            return (
+                <div className="packing-lists-container">
+                    {lists.map(list => (
+                        <PackingListCard 
+                            key={list.id}
+                            list={list}
+                            onAddItem={onAddItem}
+                            onToggleItem={onToggleItem}
+                            onDeleteItem={onDeleteItem}
+                            onDeleteList={onDeleteList}
+                        />
+                    ))}
+                    <button className="create-list-btn" onClick={onCreateList}>
+                        + Create New Packing List
+                    </button>
+                </div>
+            );
+        }
+
+        function PackingListCard({ list, onAddItem, onToggleItem, onDeleteItem, onDeleteList }) {
+            const [newItem, setNewItem] = useState('');
+
+            const handleAddItem = (e) => {
+                e.preventDefault();
+                if (newItem.trim()) {
+                    onAddItem(list.id, newItem);
+                    setNewItem('');
+                }
+            };
+
+            const progress = list.items.length > 0 
+                ? Math.round((list.items.filter(i => i.checked).length / list.items.length) * 100)
+                : 0;
+
+            return (
+                <div className="packing-list-card">
+                    <div className="list-header">
+                        <h3 className="list-title">{list.name}</h3>
+                        <button className="delete-btn" onClick={() => onDeleteList(list.id)}>×</button>
+                    </div>
+                    <div style={{marginBottom: '1rem', color: 'var(--success)', fontWeight: 'bold'}}>
+                        {progress}% Complete
+                    </div>
+                    <div>
+                        {list.items.map(item => (
+                            <div key={item.id} className="list-item">
+                                <div 
+                                    className={`checkbox ${item.checked ? 'checked' : ''}`}
+                                    onClick={() => onToggleItem(list.id, item.id)}
+                                ></div>
+                                <span className={`item-text ${item.checked ? 'checked' : ''}`}>
+                                    {item.name}
+                                </span>
+                                <button 
+                                    className="delete-btn"
+                                    onClick={() => onDeleteItem(list.id, item.id)}
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <form className="add-item-form" onSubmit={handleAddItem}>
+                        <input 
+                            type="text"
+                            placeholder="Add item..."
+                            value={newItem}
+                            onChange={(e) => setNewItem(e.target.value)}
+                        />
+                        <button type="submit">+</button>
+                    </form>
+                </div>
+            );
+        }
+
+        function PlacesView({ places, onAddPlace, onToggleStatus, onDeletePlace }) {
+            const [showForm, setShowForm] = useState(false);
+            const [placeName, setPlaceName] = useState('');
+            const [isVisited, setIsVisited] = useState(false);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (placeName.trim()) {
+                    onAddPlace(placeName, isVisited);
+                    setPlaceName('');
+                    setIsVisited(false);
+                    setShowForm(false);
+                }
+            };
+
+            const visitedPlaces = places.filter(p => p.visited);
+            const bucketList = places.filter(p => !p.visited);
+
+            return (
+                <div>
+                    {showForm ? (
+                        <div className="add-place-form">
+                            <h3>Add a Place</h3>
+                            <form onSubmit={handleSubmit}>
+                                <div className="form-group">
+                                    <label>Place Name</label>
+                                    <input 
+                                        type="text"
+                                        value={placeName}
+                                        onChange={(e) => setPlaceName(e.target.value)}
+                                        placeholder="e.g., Tokyo, Japan"
+                                        required
+                                    />
+                                </div>
+                                <div className="toggle-group">
+                                    <button 
+                                        type="button"
+                                        className={`toggle-btn ${!isVisited ? 'active' : ''}`}
+                                        onClick={() => setIsVisited(false)}
+                                    >
+                                        Bucket List
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        className={`toggle-btn ${isVisited ? 'active' : ''}`}
+                                        onClick={() => setIsVisited(true)}
+                                    >
+                                        Already Visited
+                                    </button>
+                                </div>
+                                <div style={{display: 'flex', gap: '1rem'}}>
+                                    <button type="submit" className="btn btn-primary" style={{flex: 1}}>
+                                        Add Place
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        className="btn" 
+                                        onClick={() => setShowForm(false)}
+                                        style={{flex: 1}}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    ) : (
+                        <button 
+                            className="create-list-btn" 
+                            onClick={() => setShowForm(true)}
+                            style={{marginBottom: '2rem'}}
+                        >
+                            + Add New Place
+                        </button>
+                    )}
+
+                    <div style={{marginBottom: '3rem'}}>
+                        <h2 style={{fontFamily: 'Playfair Display, serif', fontSize: '2rem', marginBottom: '1.5rem', color: 'var(--success)'}}>
+                            Places I've Visited ({visitedPlaces.length})
+                        </h2>
+                        <div className="places-grid">
+                            {visitedPlaces.map(place => (
+                                <PlaceCard 
+                                    key={place.id}
+                                    place={place}
+                                    onToggleStatus={onToggleStatus}
+                                    onDelete={onDeletePlace}
+                                />
+                            ))}
+                            {visitedPlaces.length === 0 && (
+                                <p style={{color: 'rgba(255,255,255,0.5)', fontStyle: 'italic'}}>
+                                    No visited places yet. Start adding your travels!
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div>
+                        <h2 style={{fontFamily: 'Playfair Display, serif', fontSize: '2rem', marginBottom: '1.5rem', color: 'var(--accent)'}}>
+                            Bucket List ({bucketList.length})
+                        </h2>
+                        <div className="places-grid">
+                            {bucketList.map(place => (
+                                <PlaceCard 
+                                    key={place.id}
+                                    place={place}
+                                    onToggleStatus={onToggleStatus}
+                                    onDelete={onDeletePlace}
+                                />
+                            ))}
+                            {bucketList.length === 0 && (
+                                <p style={{color: 'rgba(255,255,255,0.5)', fontStyle: 'italic'}}>
+                                    No bucket list places yet. Where do you want to go?
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function PlaceCard({ place, onToggleStatus, onDelete }) {
+            return (
+                <div className={`place-card ${place.visited ? 'visited' : 'bucket'}`}>
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'start'}}>
+                        <div>
+                            <h3 className="place-name">{place.name}</h3>
+                            <span className={`place-status ${place.visited ? 'visited' : 'bucket'}`}>
+                                {place.visited ? 'Visited' : 'Bucket List'}
+                            </span>
+                        </div>
+                        <button className="delete-btn" onClick={() => onDelete(place.id)}>×</button>
+                    </div>
+                    <button 
+                        className="btn" 
+                        onClick={() => onToggleStatus(place.id)}
+                        style={{width: '100%', marginTop: '1rem', fontSize: '0.8rem'}}
+                    >
+                        {place.visited ? 'Move to Bucket List' : 'Mark as Visited'}
+                    </button>
+                </div>
+            );
+        }
+
+        function AIAssistantView() {
+            return (
+                <div className="ai-chat-container">
+                    <h2>AI Travel Assistant</h2>
+                    <p>Coming Soon! This feature will help you plan your trips with AI-powered recommendations.</p>
+                    <div className="token-info">
+                        Free tokens available: Integration pending
+                    </div>
+                    <p style={{marginTop: '2rem', fontSize: '0.9rem'}}>
+                        The AI assistant will help you:
+                        <br/>• Generate custom packing lists based on your destination
+                        <br/>• Suggest itineraries and activities
+                        <br/>• Answer travel questions
+                        <br/>• Provide budget estimates
+                    </p>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
