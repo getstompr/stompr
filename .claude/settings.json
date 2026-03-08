@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"AIView\\\\|activeTab === ''ai''\\\\|AITravel\\\\|anthropic\\\\|claude\\\\|ANTHROPIC\\\\|apiKey\\\\|system.*prompt\\\\|systemPrompt\" /Users/aster/Documents/GitHub/stompr/index.html)"
+    ]
+  }
+}

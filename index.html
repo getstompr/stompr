@@ -309,6 +309,11 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; transform: scale(0.85); }
+            50% { opacity: 1; transform: scale(1); }
+        }
+
         .dashboard-header {
             margin-bottom: 2rem;
         }
@@ -1336,7 +1341,7 @@
                             )}
 
                             {activeTab === 'ai' && (
-                                <AIAssistantView />
+                                <AIAssistantView session={session} profile={profile} places={places} />
                             )}
 
                             {activeTab === 'expenses' && (
@@ -2251,21 +2256,292 @@
             );
         }
 
-        function AIAssistantView() {
-            return (
-                <div className="ai-chat-container">
-                    <h2>AI Travel Assistant</h2>
-                    <p>Coming Soon! This feature will help you plan your trips with AI-powered recommendations.</p>
-                    <div className="token-info">
-                        Free tokens available: Integration pending
+        function AIAssistantView({ session, profile, places }) {
+            const { useState, useEffect, useRef } = React;
+            const userId   = session?.user?.id || 'guest';
+            const AGENT_KEY = 'stompr_agent_' + userId;
+            const CHAT_KEY  = 'stompr_chat_'  + userId;
+
+            const [agentProfile, setAgentProfile] = useState(() => {
+                try { return JSON.parse(localStorage.getItem(AGENT_KEY)); } catch { return null; }
+            });
+            const [messages, setMessages] = useState(() => {
+                try { return JSON.parse(localStorage.getItem(CHAT_KEY)) || []; } catch { return []; }
+            });
+            const [onboarding, setOnboarding] = useState(!agentProfile);
+            const [step, setStep]   = useState(0);
+            const [draft, setDraft] = useState({ travelStyle:'', groupType:'', tripTypes:[], homeCity:'', tripDuration:'', dietary:'', dreamDestinations:'' });
+            const [input, setInput] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
+            const bottomRef = useRef(null);
+            const apiKey = localStorage.getItem('stompr_ak') || '';
+
+            const visitedPlaces = (places || []).filter(p => p.visited).map(p => p.name);
+            const bucketList    = (places || []).filter(p => !p.visited).map(p => p.name);
+            const userName = profile?.full_name || session?.user?.email?.split('@')[0] || 'Traveler';
+
+            useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+
+            const saveAgentProfile = (ap) => { localStorage.setItem(AGENT_KEY, JSON.stringify(ap)); setAgentProfile(ap); };
+            const saveMessages = (msgs) => {
+                const trimmed = msgs.slice(-40);
+                localStorage.setItem(CHAT_KEY, JSON.stringify(trimmed));
+                setMessages(trimmed);
+            };
+
+            const buildSystemPrompt = (ap) => `You are ${userName}'s personal AI travel assistant inside the Stompr travel app. You have deep knowledge of their travel preferences and history. Be warm, enthusiastic, and concise. Always tailor recommendations to their profile.
+
+USER PROFILE:
+- Name: ${userName}
+- Travel style: ${ap.travelStyle}
+- Usually travels: ${ap.groupType}
+- Favorite trip types: ${(ap.tripTypes||[]).join(', ')}
+- Based in: ${ap.homeCity || 'not specified'}
+- Typical trip duration: ${ap.tripDuration}
+- Dietary / health notes: ${ap.dietary || 'none'}
+- Dream destinations: ${ap.dreamDestinations || 'none specified'}
+
+TRAVEL HISTORY (from their Stompr app):
+- Places visited: ${visitedPlaces.length ? visitedPlaces.join(', ') : 'none logged yet'}
+- Bucket list: ${bucketList.length ? bucketList.join(', ') : 'none yet'}
+
+RULES:
+1. Personalize every response — use their name occasionally and reference their profile when relevant.
+2. When they mention a new trip, preference, or experience, acknowledge it warmly.
+3. Proactively suggest destinations or tips that match their travel style and budget.
+4. Keep responses clear and scannable — use bullet points where helpful.
+5. Never give generic advice — always make it feel personal to this specific traveler.`;
+
+            const finishOnboarding = (finalDraft) => {
+                saveAgentProfile(finalDraft);
+                setOnboarding(false);
+                const dreamLine = finalDraft.dreamDestinations ? `, and you're dreaming of **${finalDraft.dreamDestinations}**` : '';
+                const welcome = { role:'assistant', content:`Hey ${userName}! 👋 I'm your personal travel assistant, and I'm so excited to plan adventures with you.\n\nBased on what you've shared, I know you're a **${finalDraft.travelStyle}** traveler who loves **${(finalDraft.tripTypes||[]).join(', ')}** trips${dreamLine}. That's a great foundation to work from!\n\nWhat would you like help with today? I can suggest itineraries, help you pack smarter, find trips that match your style, or just brainstorm your next big adventure. ✈️` };
+                saveMessages([welcome]);
+            };
+
+            const sendMessage = async (e) => {
+                e.preventDefault();
+                if (!input.trim() || loading) return;
+                if (!apiKey) { alert('Please add your Anthropic API key in Budget & Expenses → Shared Expenses to chat with your agent.'); return; }
+                const userMsg = { role:'user', content: input.trim() };
+                const newMsgs = [...messages, userMsg];
+                saveMessages(newMsgs);
+                setInput('');
+                setLoading(true);
+                try {
+                    const res = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: { 'x-api-key': apiKey, 'anthropic-version':'2023-06-01', 'content-type':'application/json', 'anthropic-dangerous-direct-browser-access':'true' },
+                        body: JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:1024, system: buildSystemPrompt(agentProfile), messages: newMsgs.slice(-20) })
+                    });
+                    const data = await res.json();
+                    const reply = { role:'assistant', content: data.content?.[0]?.text || 'Sorry, I had trouble responding. Please try again.' };
+                    saveMessages([...newMsgs, reply]);
+                } catch {
+                    saveMessages([...newMsgs, { role:'assistant', content:'Connection error — please check your API key and try again.' }]);
+                }
+                setLoading(false);
+            };
+
+            const TRIP_TYPES  = ['Beach & Sun','Adventure & Hiking','Cultural & Historical','City & Urban','Nature & Wildlife','Food & Culinary','Road Trips','Luxury & Spa'];
+            const DURATIONS   = ['Weekend getaway','1 week','2 weeks','3+ weeks','It varies'];
+            const GROUP_OPTS  = ['Solo','With my partner','With family','With friends','Mix of everything'];
+            const STYLE_OPTS  = [
+                { value:'budget',    label:'Budget',    icon:'🎒', desc:'Hostels, street food, local transport' },
+                { value:'mid-range', label:'Mid-range', icon:'✈️', desc:'Comfortable hotels, nice restaurants' },
+                { value:'luxury',    label:'Luxury',    icon:'🥂', desc:'5-star stays, business class, fine dining' },
+            ];
+
+            const pill = (sel) => ({ padding:'0.45rem 0.9rem', borderRadius:'20px', border: sel ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: sel ? 'rgba(255,90,95,0.08)' : 'var(--card-bg)', color: sel ? 'var(--primary)' : 'var(--text)', fontWeight: sel ? '700' : '500', fontSize:'0.83rem', cursor:'pointer', transition:'all 0.15s', fontFamily:'Inter, sans-serif' });
+            const stepLabel = (n) => (
+                <div style={{fontSize:'0.72rem', fontWeight:'700', color:'var(--primary)', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:'0.4rem'}}>Step {n} of 5</div>
+            );
+
+            const onboardSteps = [
+                /* 0: Welcome */
+                () => (
+                    <div style={{textAlign:'center', padding:'2rem 1rem'}}>
+                        <div style={{fontSize:'3.5rem', marginBottom:'1rem'}}>🌍</div>
+                        <h2 style={{fontSize:'1.45rem', fontWeight:'800', color:'var(--text)', marginBottom:'0.75rem'}}>Meet Your Travel Agent</h2>
+                        <p style={{color:'var(--text-muted)', fontSize:'0.92rem', lineHeight:'1.65', maxWidth:'360px', margin:'0 auto 2rem'}}>
+                            Answer 5 quick questions so I can personalize every recommendation, remember your style, and become your dedicated travel companion over time.
+                        </p>
+                        <button className="btn btn-primary" style={{padding:'0.75rem 2.5rem', fontSize:'1rem'}} onClick={() => setStep(1)}>Let's get started →</button>
                     </div>
-                    <p style={{marginTop: '2rem', fontSize: '0.9rem'}}>
-                        The AI assistant will help you:
-                        <br/>• Generate custom packing lists based on your destination
-                        <br/>• Suggest itineraries and activities
-                        <br/>• Answer travel questions
-                        <br/>• Provide budget estimates
-                    </p>
+                ),
+                /* 1: Travel style */
+                () => (
+                    <div>
+                        <div style={{marginBottom:'1.75rem'}}>{stepLabel(1)}<h3 style={{fontSize:'1.2rem', fontWeight:'700', color:'var(--text)', margin:0}}>What's your travel style?</h3></div>
+                        <div style={{display:'flex', flexDirection:'column', gap:'0.75rem', marginBottom:'2rem'}}>
+                            {STYLE_OPTS.map(opt => (
+                                <button key={opt.value} onClick={() => setDraft(d => ({...d, travelStyle: opt.value}))} style={{display:'flex', alignItems:'center', gap:'1rem', padding:'1rem 1.25rem', borderRadius:'12px', border: draft.travelStyle === opt.value ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: draft.travelStyle === opt.value ? 'rgba(255,90,95,0.06)' : 'var(--card-bg)', cursor:'pointer', textAlign:'left', transition:'all 0.15s', fontFamily:'Inter, sans-serif'}}>
+                                    <span style={{fontSize:'1.6rem'}}>{opt.icon}</span>
+                                    <div><div style={{fontWeight:'700', fontSize:'0.93rem', color:'var(--text)'}}>{opt.label}</div><div style={{fontSize:'0.79rem', color:'var(--text-muted)'}}>{opt.desc}</div></div>
+                                    {draft.travelStyle === opt.value && <span style={{marginLeft:'auto', color:'var(--primary)', fontWeight:'700'}}>✓</span>}
+                                </button>
+                            ))}
+                        </div>
+                        <button className="btn btn-primary" style={{width:'100%'}} disabled={!draft.travelStyle} onClick={() => setStep(2)}>Continue →</button>
+                    </div>
+                ),
+                /* 2: Group type */
+                () => (
+                    <div>
+                        <div style={{marginBottom:'1.75rem'}}>{stepLabel(2)}<h3 style={{fontSize:'1.2rem', fontWeight:'700', color:'var(--text)', margin:0}}>How do you usually travel?</h3></div>
+                        <div style={{display:'flex', flexDirection:'column', gap:'0.65rem', marginBottom:'2rem'}}>
+                            {GROUP_OPTS.map(opt => (
+                                <button key={opt} onClick={() => setDraft(d => ({...d, groupType: opt}))} style={{...pill(draft.groupType === opt), display:'block', width:'100%', textAlign:'left', padding:'0.85rem 1.25rem', borderRadius:'12px'}}>
+                                    {opt}
+                                </button>
+                            ))}
+                        </div>
+                        <div style={{display:'flex', gap:'0.75rem'}}><button className="btn" style={{flex:1}} onClick={() => setStep(1)}>← Back</button><button className="btn btn-primary" style={{flex:2}} disabled={!draft.groupType} onClick={() => setStep(3)}>Continue →</button></div>
+                    </div>
+                ),
+                /* 3: Trip types */
+                () => (
+                    <div>
+                        <div style={{marginBottom:'1.75rem'}}>{stepLabel(3)}<h3 style={{fontSize:'1.2rem', fontWeight:'700', color:'var(--text)', margin:0}}>What kinds of trips excite you?</h3><p style={{fontSize:'0.82rem', color:'var(--text-muted)', margin:'0.25rem 0 0'}}>Pick as many as you like.</p></div>
+                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.6rem', marginBottom:'2rem'}}>
+                            {TRIP_TYPES.map(t => { const sel = draft.tripTypes.includes(t); return (<button key={t} onClick={() => setDraft(d => ({...d, tripTypes: sel ? d.tripTypes.filter(x => x !== t) : [...d.tripTypes, t]}))} style={pill(sel)}>{t}</button>); })}
+                        </div>
+                        <div style={{display:'flex', gap:'0.75rem'}}><button className="btn" style={{flex:1}} onClick={() => setStep(2)}>← Back</button><button className="btn btn-primary" style={{flex:2}} disabled={draft.tripTypes.length === 0} onClick={() => setStep(4)}>Continue →</button></div>
+                    </div>
+                ),
+                /* 4: Home city + duration */
+                () => (
+                    <div>
+                        <div style={{marginBottom:'1.75rem'}}>{stepLabel(4)}<h3 style={{fontSize:'1.2rem', fontWeight:'700', color:'var(--text)', margin:0}}>A little more about you</h3></div>
+                        <div className="form-group" style={{marginBottom:'1.25rem'}}>
+                            <label>Where are you based? <span style={{color:'var(--text-muted)', fontWeight:'400'}}>(optional)</span></label>
+                            <input type="text" value={draft.homeCity} onChange={e => setDraft(d => ({...d, homeCity: e.target.value}))} placeholder="e.g. New York, USA" />
+                        </div>
+                        <div className="form-group" style={{marginBottom:'2rem'}}>
+                            <label>Typical trip duration</label>
+                            <div style={{display:'flex', flexWrap:'wrap', gap:'0.6rem', marginTop:'0.5rem'}}>
+                                {DURATIONS.map(d2 => (<button key={d2} onClick={() => setDraft(d => ({...d, tripDuration: d2}))} style={pill(draft.tripDuration === d2)}>{d2}</button>))}
+                            </div>
+                        </div>
+                        <div style={{display:'flex', gap:'0.75rem'}}><button className="btn" style={{flex:1}} onClick={() => setStep(3)}>← Back</button><button className="btn btn-primary" style={{flex:2}} disabled={!draft.tripDuration} onClick={() => setStep(5)}>Continue →</button></div>
+                    </div>
+                ),
+                /* 5: Dietary + dreams */
+                () => (
+                    <div>
+                        <div style={{marginBottom:'1.75rem'}}>{stepLabel(5)}<h3 style={{fontSize:'1.2rem', fontWeight:'700', color:'var(--text)', margin:0}}>Almost there!</h3></div>
+                        <div className="form-group" style={{marginBottom:'1.25rem'}}>
+                            <label>Dietary or health considerations <span style={{color:'var(--text-muted)', fontWeight:'400'}}>(optional)</span></label>
+                            <input type="text" value={draft.dietary} onChange={e => setDraft(d => ({...d, dietary: e.target.value}))} placeholder="e.g. Vegetarian, gluten-free, no shellfish" />
+                        </div>
+                        <div className="form-group" style={{marginBottom:'2rem'}}>
+                            <label>Top dream destinations <span style={{color:'var(--text-muted)', fontWeight:'400'}}>(optional)</span></label>
+                            <input type="text" value={draft.dreamDestinations} onChange={e => setDraft(d => ({...d, dreamDestinations: e.target.value}))} placeholder="e.g. Japan, Iceland, Patagonia" />
+                        </div>
+                        <div style={{display:'flex', gap:'0.75rem'}}><button className="btn" style={{flex:1}} onClick={() => setStep(4)}>← Back</button><button className="btn btn-primary" style={{flex:2}} onClick={() => finishOnboarding(draft)}>Meet my agent →</button></div>
+                    </div>
+                ),
+            ];
+
+            if (onboarding) {
+                return (
+                    <div style={{maxWidth:'480px', margin:'0 auto', padding:'0.5rem 0'}}>
+                        <div style={{background:'var(--card-bg)', borderRadius:'16px', padding:'2rem', border:'1px solid var(--border)', boxShadow:'0 2px 12px rgba(0,0,0,0.07)'}}>
+                            {onboardSteps[step]()}
+                        </div>
+                    </div>
+                );
+            }
+
+            const renderMessage = (msg, i) => {
+                const isUser = msg.role === 'user';
+                return (
+                    <div key={i} style={{display:'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', marginBottom:'0.9rem', alignItems:'flex-end', gap:'0.5rem'}}>
+                        {!isUser && <div style={{width:'28px', height:'28px', borderRadius:'50%', background:'linear-gradient(135deg,#FF5A5F,#FF8A65)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.8rem', flexShrink:0}}>✈️</div>}
+                        <div style={{maxWidth:'78%', padding:'0.7rem 1rem', borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: isUser ? 'var(--primary)' : 'var(--card-bg)', color: isUser ? '#fff' : 'var(--text)', fontSize:'0.87rem', lineHeight:'1.58', border: isUser ? 'none' : '1px solid var(--border)', boxShadow:'0 1px 4px rgba(0,0,0,0.07)', whiteSpace:'pre-wrap'}}>
+                            {msg.content}
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div style={{display:'flex', flexDirection:'column', height:'calc(100vh - 230px)', minHeight:'500px'}}>
+                    {/* Header */}
+                    <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1rem'}}>
+                        <div>
+                            <h2 style={{fontSize:'1.15rem', fontWeight:'700', color:'var(--text)', margin:0}}>Your Travel Agent</h2>
+                            <p style={{fontSize:'0.76rem', color:'var(--text-muted)', margin:'0.1rem 0 0'}}>Personalized for {userName} · learns from every conversation</p>
+                        </div>
+                        <button onClick={() => setShowSettings(s => !s)} style={{background:'none', border:'1.5px solid var(--border)', borderRadius:'8px', padding:'0.4rem 0.75rem', fontSize:'0.78rem', color:'var(--text-muted)', cursor:'pointer', fontFamily:'Inter, sans-serif', fontWeight:'600'}}>
+                            ⚙️ Settings
+                        </button>
+                    </div>
+
+                    {/* Settings panel */}
+                    {showSettings && agentProfile && (
+                        <div style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'12px', padding:'1.25rem', marginBottom:'1rem'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.9rem'}}>
+                                <div style={{fontWeight:'700', fontSize:'0.93rem', color:'var(--text)'}}>Agent Preferences</div>
+                                <button onClick={() => { setDraft({...agentProfile}); setOnboarding(true); setStep(1); setShowSettings(false); }} style={{fontSize:'0.78rem', color:'var(--primary)', fontWeight:'600', background:'none', border:'none', cursor:'pointer', fontFamily:'Inter, sans-serif'}}>Edit →</button>
+                            </div>
+                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.5rem', fontSize:'0.79rem'}}>
+                                {[['Style', agentProfile.travelStyle], ['Group', agentProfile.groupType], ['Duration', agentProfile.tripDuration], ['Based in', agentProfile.homeCity || '—'], ['Trip types', (agentProfile.tripTypes||[]).join(', ')], ['Dreams', agentProfile.dreamDestinations || '—']].map(([k, v]) => (
+                                    <div key={k} style={{background:'var(--bg)', borderRadius:'8px', padding:'0.45rem 0.7rem'}}>
+                                        <div style={{color:'var(--text-muted)', fontSize:'0.68rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.05em'}}>{k}</div>
+                                        <div style={{color:'var(--text)', fontWeight:'600', marginTop:'0.1rem', textTransform:'capitalize', wordBreak:'break-word'}}>{v}</div>
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={() => { if (window.confirm('Clear all conversation history?')) { saveMessages([]); setShowSettings(false); }}} style={{marginTop:'1rem', width:'100%', background:'none', border:'1.5px solid #fca5a5', borderRadius:'8px', padding:'0.5rem', color:'#ef4444', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.79rem', cursor:'pointer'}}>
+                                Clear conversation history
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Messages */}
+                    <div style={{flex:1, overflowY:'auto', padding:'0.25rem 0.1rem', display:'flex', flexDirection:'column'}}>
+                        {messages.length === 0 && !loading && (
+                            <div style={{textAlign:'center', marginTop:'4rem', color:'var(--text-muted)'}}>
+                                <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>✈️</div>
+                                <p style={{fontSize:'0.9rem'}}>Your agent is ready — ask me anything!</p>
+                            </div>
+                        )}
+                        {messages.map(renderMessage)}
+                        {loading && (
+                            <div style={{display:'flex', alignItems:'flex-end', gap:'0.5rem', marginBottom:'0.9rem'}}>
+                                <div style={{width:'28px', height:'28px', borderRadius:'50%', background:'linear-gradient(135deg,#FF5A5F,#FF8A65)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.8rem', flexShrink:0}}>✈️</div>
+                                <div style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'18px 18px 18px 4px', padding:'0.7rem 1rem'}}>
+                                    <span style={{display:'inline-flex', gap:'5px', alignItems:'center'}}>
+                                        {[0, 0.2, 0.4].map((delay, i) => <span key={i} style={{display:'inline-block', width:'7px', height:'7px', borderRadius:'50%', background:'var(--text-muted)', animation:`pulse 1.1s ease-in-out ${delay}s infinite`}} />)}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                        <div ref={bottomRef} />
+                    </div>
+
+                    {/* Input */}
+                    <form onSubmit={sendMessage} style={{display:'flex', gap:'0.6rem', paddingTop:'0.75rem', borderTop:'1px solid var(--border)'}}>
+                        <input
+                            type="text"
+                            value={input}
+                            onChange={e => setInput(e.target.value)}
+                            placeholder="Ask your travel agent anything…"
+                            disabled={loading}
+                            style={{flex:1, padding:'0.7rem 1rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.87rem', outline:'none', background:'var(--card-bg)', color:'var(--text)'}}
+                        />
+                        <button type="submit" disabled={!input.trim() || loading} style={{padding:'0.7rem 1.25rem', borderRadius:'24px', background:'var(--primary)', color:'#fff', border:'none', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.87rem', cursor:'pointer', opacity:(!input.trim() || loading) ? 0.45 : 1, transition:'opacity 0.15s'}}>
+                            Send
+                        </button>
+                    </form>
+                    {!apiKey && (
+                        <p style={{fontSize:'0.74rem', color:'#f59e0b', marginTop:'0.5rem', textAlign:'center'}}>
+                            ⚠️ No API key set — add your Anthropic key in Budget &amp; Expenses → Shared Expenses to start chatting.
+                        </p>
+                    )}
                 </div>
             );
         }
