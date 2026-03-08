@@ -11,7 +11,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #0EA5E9;
@@ -1115,7 +1115,7 @@
                         <div className="bg-pattern"></div>
                         <header>
                             <div className="header-content">
-                                <div className="logo"><a href="/" onClick={(e) => { e.preventDefault(); setShowLanding(true); }}><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /></a></div>
+                                <div className="logo"><a href="/" onClick={(e) => { e.preventDefault(); setShowLanding(true); }} style={{display:'flex', flexDirection:'column', alignItems:'flex-start', textDecoration:'none'}}><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /><span style={{fontFamily:"'Dancing Script', cursive", fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'-2px', letterSpacing:'0.5px'}}>Travel like a local</span></a></div>
                                 <div className="nav-buttons">
                                     <button onClick={() => { setShowLanding(false); setIsSignUp(false); }} style={{background:'none', border:'1.5px solid var(--border)', borderRadius:'24px', padding:'0.5rem 1.25rem', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.88rem', color:'var(--text)', cursor:'pointer', marginRight:'0.5rem'}}>Log In</button>
                                     <button onClick={() => { setShowLanding(false); setIsSignUp(true); }} className="btn btn-primary" style={{borderRadius:'24px', padding:'0.5rem 1.25rem', fontSize:'0.88rem'}}>Sign Up</button>
@@ -1181,7 +1181,7 @@
                         <div className="bg-pattern"></div>
                         <header>
                             <div className="header-content">
-                                <div className="logo"><a href="/" onClick={(e) => { e.preventDefault(); setShowLanding(true); }}><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /></a></div>
+                                <div className="logo"><a href="/" onClick={(e) => { e.preventDefault(); setShowLanding(true); }} style={{display:'flex', flexDirection:'column', alignItems:'flex-start', textDecoration:'none'}}><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /><span style={{fontFamily:"'Dancing Script', cursive", fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'-2px', letterSpacing:'0.5px'}}>Travel like a local</span></a></div>
                             </div>
                         </header>
                         <div className="main-content">
@@ -1379,7 +1379,7 @@
                     <div className="bg-pattern"></div>
                     <header>
                         <div className="header-content">
-                            <div className="logo"><a href="/" onClick={(e) => { e.preventDefault(); setActiveTab('ai'); }}><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /></a></div>
+                            <div className="logo"><a href="/" onClick={(e) => { e.preventDefault(); setActiveTab('ai'); }} style={{display:'flex', flexDirection:'column', alignItems:'flex-start', textDecoration:'none'}}><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /><span style={{fontFamily:"'Dancing Script', cursive", fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'-2px', letterSpacing:'0.5px'}}>Travel like a local</span></a></div>
                             <div className="nav-buttons">
                                 <div className="profile-wrap">
                                     {profileOpen && <div className="profile-overlay" onClick={() => setProfileOpen(false)} />}
@@ -2373,7 +2373,7 @@
                 }
             }, [places, communityTab]);
 
-            const displayName = profile?.full_name || session?.user?.email?.split('@')[0] || 'Traveler';
+            const displayName = (profile?.full_name || session?.user?.email?.split('@')[0] || 'Traveler').split(' ')[0];
             const userName = displayName;
             const userHandle = profile?.username ? ('@' + profile.username) : '';
             const userInitial = displayName[0].toUpperCase();
