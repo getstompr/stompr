@@ -953,6 +953,7 @@
             const [newPassword, setNewPassword] = useState('');
             const [resetMsg, setResetMsg] = useState('');
             const [resetLoading, setResetLoading] = useState(false);
+            const [showLanding, setShowLanding] = useState(true);
             const [activeTab, setActiveTab] = useState('ai');
             const [places, setPlaces] = useState([]);
             const [profile, setProfile] = useState(null);
@@ -1095,13 +1096,79 @@
                 );
             }
 
+            if (!session && showLanding) {
+                return (
+                    <div className="app-container" style={{overflow:'hidden'}}>
+                        <div className="bg-pattern"></div>
+                        <header>
+                            <div className="header-content">
+                                <div className="logo"><a href="/" onClick={(e) => { e.preventDefault(); setShowLanding(true); }}><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /></a></div>
+                                <div className="nav-buttons">
+                                    <button onClick={() => { setShowLanding(false); setIsSignUp(false); }} style={{background:'none', border:'1.5px solid var(--border)', borderRadius:'24px', padding:'0.5rem 1.25rem', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.88rem', color:'var(--text)', cursor:'pointer', marginRight:'0.5rem'}}>Log In</button>
+                                    <button onClick={() => { setShowLanding(false); setIsSignUp(true); }} className="btn btn-primary" style={{borderRadius:'24px', padding:'0.5rem 1.25rem', fontSize:'0.88rem'}}>Sign Up</button>
+                                </div>
+                            </div>
+                        </header>
+
+                        {/* ── Hero ── */}
+                        <div style={{textAlign:'center', padding:'5rem 1.5rem 3rem', maxWidth:'680px', margin:'0 auto'}}>
+                            <h1 style={{fontSize:'clamp(2rem, 5vw, 3.2rem)', fontWeight:'800', lineHeight:'1.15', color:'var(--text)', marginBottom:'1.25rem'}}>
+                                Travel smarter,<br/>not harder.
+                            </h1>
+                            <p style={{fontSize:'clamp(1rem, 2.5vw, 1.2rem)', color:'var(--text-muted)', lineHeight:'1.65', maxWidth:'520px', margin:'0 auto 2.5rem'}}>
+                                Your all-in-one travel companion — personalized AI agent, smart packing lists, budget tracking, and trip planning in one place.
+                            </p>
+                            <div style={{display:'flex', gap:'1rem', justifyContent:'center', flexWrap:'wrap'}}>
+                                <button onClick={() => { setShowLanding(false); setIsSignUp(true); }} className="btn btn-primary" style={{borderRadius:'28px', padding:'0.85rem 2.5rem', fontSize:'1.05rem', fontWeight:'700'}}>
+                                    Get Started — it's free
+                                </button>
+                                <button onClick={() => { setShowLanding(false); setIsSignUp(false); }} style={{borderRadius:'28px', padding:'0.85rem 2rem', fontSize:'1.05rem', fontWeight:'600', background:'none', border:'2px solid var(--border)', color:'var(--text)', cursor:'pointer', fontFamily:'Inter, sans-serif'}}>
+                                    I have an account
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* ── Features ── */}
+                        <div style={{maxWidth:'900px', margin:'0 auto', padding:'2rem 1.5rem 4rem'}}>
+                            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'1.5rem'}}>
+                                {[
+                                    { icon:'🤖', title:'Personal AI Agent', desc:'An assistant that learns your style, remembers your trips, and gives tailored recommendations.' },
+                                    { icon:'🧳', title:'Smart Packing Lists', desc:'Country-specific lists with government health alerts, CDC warnings, and cultural tips.' },
+                                    { icon:'💰', title:'Budget & Expenses', desc:'Track personal spending and split group costs with Venmo and Zelle integration.' },
+                                    { icon:'🗺️', title:'Interactive Maps', desc:'Search destinations, pin your bucket list, and see your travels on a live map.' },
+                                    { icon:'📋', title:'Bucket List', desc:'Build your dream travel list and mark places as visited as you go.' },
+                                    { icon:'🔒', title:'Private & Secure', desc:'Your data stays yours. Everything syncs securely with your account.' },
+                                ].map(f => (
+                                    <div key={f.title} style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'16px', padding:'1.5rem', textAlign:'center'}}>
+                                        <div style={{fontSize:'2rem', marginBottom:'0.75rem'}}>{f.icon}</div>
+                                        <div style={{fontWeight:'700', fontSize:'1rem', color:'var(--text)', marginBottom:'0.4rem'}}>{f.title}</div>
+                                        <p style={{fontSize:'0.85rem', color:'var(--text-muted)', lineHeight:'1.55', margin:0}}>{f.desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* ── Bottom CTA ── */}
+                        <div style={{textAlign:'center', padding:'2rem 1.5rem 3rem', borderTop:'1px solid var(--border)'}}>
+                            <h2 style={{fontSize:'1.5rem', fontWeight:'800', color:'var(--text)', marginBottom:'0.75rem'}}>Ready to plan your next adventure?</h2>
+                            <p style={{color:'var(--text-muted)', fontSize:'0.95rem', marginBottom:'1.5rem'}}>Join Stompr today — no credit card required.</p>
+                            <button onClick={() => { setShowLanding(false); setIsSignUp(true); }} className="btn btn-primary" style={{borderRadius:'28px', padding:'0.85rem 2.5rem', fontSize:'1.05rem', fontWeight:'700'}}>
+                                Create Free Account
+                            </button>
+                        </div>
+
+                        <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 1rem'}}>With love from A&amp;E</footer>
+                    </div>
+                );
+            }
+
             if (!session) {
                 return (
                     <div className="app-container">
                         <div className="bg-pattern"></div>
                         <header>
                             <div className="header-content">
-                                <div className="logo"><a href="/"><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /></a></div>
+                                <div className="logo"><a href="/" onClick={(e) => { e.preventDefault(); setShowLanding(true); }}><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /></a></div>
                             </div>
                         </header>
                         <div className="main-content">
@@ -1270,7 +1337,7 @@
                         <div className="bg-pattern"></div>
                         <header>
                             <div className="header-content">
-                                <div className="logo"><a href="/"><img src="Stompr_transparent.png" alt="Stompr" style={{height:'40px'}} /></a></div>
+                                <div className="logo"><a href="/" onClick={(e) => { e.preventDefault(); setShowLanding(true); }}><img src="Stompr_transparent.png" alt="Stompr" style={{height:'40px'}} /></a></div>
                             </div>
                         </header>
                         <div className="main-content">
@@ -1299,7 +1366,7 @@
                     <div className="bg-pattern"></div>
                     <header>
                         <div className="header-content">
-                            <div className="logo"><a href="/"><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /></a></div>
+                            <div className="logo"><a href="/" onClick={(e) => { e.preventDefault(); setActiveTab('ai'); }}><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /></a></div>
                             <div className="nav-buttons">
                                 <div className="profile-wrap">
                                     {profileOpen && <div className="profile-overlay" onClick={() => setProfileOpen(false)} />}
