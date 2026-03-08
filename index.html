@@ -1091,14 +1091,17 @@
                 localStorage.setItem('stompr_active_tab', activeTab);
             }, [activeTab]);
 
+            const initialLoadRef = React.useRef(true);
             useEffect(() => {
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
                     setSession(session);
                     setLoading(false);
+                    // After initial load, any future SIGNED_IN is a fresh login
+                    setTimeout(() => { initialLoadRef.current = false; }, 500);
                 });
                 const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
                     setSession(session);
-                    if (event === 'SIGNED_IN') {
+                    if (event === 'SIGNED_IN' && !initialLoadRef.current) {
                         setActiveTab('ai');
                     }
                 });
