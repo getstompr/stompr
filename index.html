@@ -707,6 +707,8 @@
             font-size: 0.9rem;
         }
 
+        .leaflet-container { z-index: 1 !important; }
+
         /* Responsive */
         @media (max-width: 768px) {
             .logo { font-size: 1.3rem; }
@@ -3396,11 +3398,15 @@
                 if (val.length < 2) { setSuggestions([]); return; }
                 debounceRef.current = setTimeout(async () => {
                     try {
-                        const res  = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=5&addressdetails=0`);
+                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=5&addressdetails=0`, {
+                            headers: { 'Accept': 'application/json' }
+                        });
+                        if (!res.ok) { console.warn('Nominatim error:', res.status); setSuggestions([]); return; }
                         const data = await res.json();
-                        setSuggestions(data);
-                    } catch { setSuggestions([]); }
-                }, 350);
+                        console.log('Nominatim results for "' + val + '":', data.length);
+                        setSuggestions(Array.isArray(data) ? data : []);
+                    } catch (err) { console.error('Nominatim fetch error:', err); setSuggestions([]); }
+                }, 500);
             };
 
             const pickSuggestion = (s) => {
@@ -3443,7 +3449,7 @@
             return (
                 <div>
                     {/* ── Search bar ── */}
-                    <div style={{marginBottom:'0.4rem'}}>
+                    <div style={{marginBottom:'0.4rem', position:'relative', zIndex:1000}}>
                         <div style={{display:'flex', gap:'0.6rem', alignItems:'center'}}>
                             <div style={{flex:1, position:'relative'}}>
                                 <input
