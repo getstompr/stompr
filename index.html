@@ -614,6 +614,150 @@
             .form-row { grid-template-columns: 1fr; }
             .main-content { padding: 1.5rem 1rem; }
         }
+        /* Packing sub-tabs */
+        .packing-subtabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .packing-subtab {
+            padding: 0.5rem 1.1rem;
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            border-radius: 999px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .packing-subtab.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
+        .packing-subtab:hover:not(.active) {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* Checklist items */
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 0.875rem;
+            padding: 0.7rem 0;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            user-select: none;
+            transition: opacity 0.25s ease;
+        }
+
+        .checklist-item:last-child {
+            border-bottom: none;
+        }
+
+        .checklist-item:hover .circle-check:not(.checked) {
+            border-color: var(--primary);
+        }
+
+        /* Apple Notes-style circular checkbox */
+        .circle-check {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 2px solid #C7C7CC;
+            cursor: pointer;
+            position: relative;
+            flex-shrink: 0;
+            transition: background 0.25s ease, border-color 0.25s ease;
+            background: transparent;
+        }
+
+        .circle-check.checked {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .circle-check.checked::after {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 3px;
+            width: 5px;
+            height: 9px;
+            border: 2px solid white;
+            border-top: none;
+            border-left: none;
+            transform: rotate(45deg);
+        }
+
+        .checklist-item-label {
+            font-size: 0.925rem;
+            color: var(--text);
+            transition: color 0.25s ease, opacity 0.25s ease;
+            flex: 1;
+            line-height: 1.4;
+        }
+
+        .checklist-item-label.checked {
+            color: var(--text-muted);
+            text-decoration: line-through;
+            opacity: 0.5;
+        }
+
+        .category-header {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .category-header.medical {
+            color: #DC2626;
+            border-bottom-color: #FECACA;
+        }
+
+        .category-block {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .category-block.medical-block {
+            background: #FFF5F5;
+            border-color: #FECACA;
+        }
+
+        .reset-btn {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-muted);
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .reset-btn:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+            background: #FEF2F2;
+        }
     </style>
 </head>
 <body>
@@ -632,7 +776,6 @@
             const [isSignUp, setIsSignUp] = useState(false);
             const [authError, setAuthError] = useState('');
             const [activeTab, setActiveTab] = useState('packing');
-            const [packingLists, setPackingLists] = useState([]);
             const [places, setPlaces] = useState([]);
 
             useEffect(() => {
@@ -648,21 +791,11 @@
 
             useEffect(() => {
                 if (session) {
-                    loadPackingLists();
                     loadPlaces();
                 } else {
-                    setPackingLists([]);
                     setPlaces([]);
                 }
             }, [session]);
-
-            const loadPackingLists = async () => {
-                const { data } = await supabaseClient
-                    .from('packing_lists')
-                    .select('*, packing_items(*)')
-                    .order('created_at');
-                if (data) setPackingLists(data.map(l => ({ ...l, items: l.packing_items || [] })));
-            };
 
             const loadPlaces = async () => {
                 const { data } = await supabaseClient
@@ -697,58 +830,6 @@
 
             const handleLogout = async () => {
                 await supabaseClient.auth.signOut();
-            };
-
-            const createPackingList = async () => {
-                const listName = prompt('Enter packing list name (e.g., "Beach Vacation", "Business Trip"):');
-                if (!listName) return;
-                const { data } = await supabaseClient
-                    .from('packing_lists')
-                    .insert({ name: listName, user_id: session.user.id })
-                    .select()
-                    .single();
-                if (data) setPackingLists([...packingLists, { ...data, items: [] }]);
-            };
-
-            const addItemToList = async (listId, itemName) => {
-                const { data } = await supabaseClient
-                    .from('packing_items')
-                    .insert({ list_id: listId, name: itemName })
-                    .select()
-                    .single();
-                if (data) {
-                    setPackingLists(packingLists.map(list =>
-                        list.id === listId ? { ...list, items: [...list.items, data] } : list
-                    ));
-                }
-            };
-
-            const toggleItem = async (listId, itemId, currentChecked) => {
-                await supabaseClient
-                    .from('packing_items')
-                    .update({ checked: !currentChecked })
-                    .eq('id', itemId);
-                setPackingLists(packingLists.map(list =>
-                    list.id === listId ? {
-                        ...list,
-                        items: list.items.map(item =>
-                            item.id === itemId ? { ...item, checked: !item.checked } : item
-                        )
-                    } : list
-                ));
-            };
-
-            const deleteItem = async (listId, itemId) => {
-                await supabaseClient.from('packing_items').delete().eq('id', itemId);
-                setPackingLists(packingLists.map(list =>
-                    list.id === listId ? { ...list, items: list.items.filter(item => item.id !== itemId) } : list
-                ));
-            };
-
-            const deleteList = async (listId) => {
-                if (!confirm('Are you sure you want to delete this packing list?')) return;
-                await supabaseClient.from('packing_lists').delete().eq('id', listId);
-                setPackingLists(packingLists.filter(list => list.id !== listId));
             };
 
             const addPlace = async (placeName, visited) => {
@@ -878,14 +959,7 @@
                             </div>
 
                             {activeTab === 'packing' && (
-                                <PackingListsView
-                                    lists={packingLists}
-                                    onCreateList={createPackingList}
-                                    onAddItem={addItemToList}
-                                    onToggleItem={toggleItem}
-                                    onDeleteItem={deleteItem}
-                                    onDeleteList={deleteList}
-                                />
+                                <PresetPackingView />
                             )}
 
                             {activeTab === 'places' && (
@@ -902,88 +976,6 @@
                             )}
                         </div>
                     </div>
-                </div>
-            );
-        }
-
-        function PackingListsView({ lists, onCreateList, onAddItem, onToggleItem, onDeleteItem, onDeleteList }) {
-            return (
-                <div className="packing-lists-container">
-                    {lists.map(list => (
-                        <PackingListCard
-                            key={list.id}
-                            list={list}
-                            onAddItem={onAddItem}
-                            onToggleItem={onToggleItem}
-                            onDeleteItem={onDeleteItem}
-                            onDeleteList={onDeleteList}
-                        />
-                    ))}
-                    <button className="create-list-btn" onClick={onCreateList}>
-                        + Create New Packing List
-                    </button>
-                </div>
-            );
-        }
-
-        function PackingListCard({ list, onAddItem, onToggleItem, onDeleteItem, onDeleteList }) {
-            const [newItem, setNewItem] = useState('');
-
-            const handleAddItem = (e) => {
-                e.preventDefault();
-                if (newItem.trim()) {
-                    onAddItem(list.id, newItem);
-                    setNewItem('');
-                }
-            };
-
-            const progress = list.items.length > 0
-                ? Math.round((list.items.filter(i => i.checked).length / list.items.length) * 100)
-                : 0;
-
-            return (
-                <div className="packing-list-card">
-                    <div className="list-header">
-                        <h3 className="list-title">{list.name}</h3>
-                        <button className="delete-btn" onClick={() => onDeleteList(list.id)}>×</button>
-                    </div>
-                    <div style={{marginBottom: '1rem'}}>
-                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'0.35rem'}}>
-                            <span style={{fontSize:'0.8rem', color:'var(--text-muted)', fontWeight:'600'}}>Progress</span>
-                            <span style={{fontSize:'0.8rem', color:'var(--primary)', fontWeight:'700'}}>{progress}%</span>
-                        </div>
-                        <div style={{height:'6px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
-                            <div style={{height:'100%', width:`${progress}%`, background:'linear-gradient(90deg, var(--primary), var(--success))', borderRadius:'999px', transition:'width 0.4s ease'}}></div>
-                        </div>
-                    </div>
-                    <div>
-                        {list.items.map(item => (
-                            <div key={item.id} className="list-item">
-                                <div
-                                    className={`checkbox ${item.checked ? 'checked' : ''}`}
-                                    onClick={() => onToggleItem(list.id, item.id, item.checked)}
-                                ></div>
-                                <span className={`item-text ${item.checked ? 'checked' : ''}`}>
-                                    {item.name}
-                                </span>
-                                <button
-                                    className="delete-btn"
-                                    onClick={() => onDeleteItem(list.id, item.id)}
-                                >
-                                    ×
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                    <form className="add-item-form" onSubmit={handleAddItem}>
-                        <input
-                            type="text"
-                            placeholder="Add item..."
-                            value={newItem}
-                            onChange={(e) => setNewItem(e.target.value)}
-                        />
-                        <button type="submit">+</button>
-                    </form>
                 </div>
             );
         }
@@ -1146,6 +1138,132 @@
                         <br/>• Answer travel questions
                         <br/>• Provide budget estimates
                     </p>
+                </div>
+            );
+        }
+
+        const PACKING_DATA = {
+            generic: {
+                label: 'Essentials', emoji: '✈️',
+                categories: [
+                    { name: 'Documents', medical: false, items: ['Passport', 'Visa (if required)', 'Travel insurance documents', 'Flight & hotel bookings', 'ID / Driver\'s license', 'Emergency contacts list', 'Photocopies of all documents'] },
+                    { name: 'Money', medical: false, items: ['Credit / debit cards', 'Cash in local currency', 'Travel wallet', 'Money belt'] },
+                    { name: 'Electronics', medical: false, items: ['Phone + charger', 'Power bank', 'Universal travel adapter', 'Headphones / earbuds', 'Camera + memory card', 'Laptop / tablet (if needed)'] },
+                    { name: 'Clothing', medical: false, items: ['Underwear (x7)', 'Socks (x7)', 'T-shirts / tops', 'Pants / shorts', 'Warm layer / jacket', 'Sleepwear', 'Comfortable walking shoes', 'Sandals / flip flops', 'Smart outfit (if needed)'] },
+                    { name: 'Toiletries', medical: false, items: ['Toothbrush + toothpaste', 'Shampoo + conditioner', 'Body wash / soap', 'Deodorant', 'Razor + shaving cream', 'Face wash + moisturiser', 'Sunscreen SPF 30+'] },
+                    { name: 'Health & Medical', medical: true, items: ['Prescription medications', 'Pain relievers (ibuprofen / paracetamol)', 'Antihistamines', 'Antidiarrheal tablets', 'Bandages + antiseptic wipes', 'Hand sanitiser', 'Face masks', 'Thermometer'] },
+                    { name: 'Miscellaneous', medical: false, items: ['Luggage lock', 'Travel pillow', 'Eye mask + earplugs', 'Reusable water bottle', 'Snacks for travel', 'Pen (for customs forms)', 'Day backpack / tote'] }
+                ]
+            },
+            beach: {
+                label: 'Beach', emoji: '🏖️',
+                categories: [
+                    { name: 'Clothing & Accessories', medical: false, items: ['Swimsuit / trunks (x2)', 'Cover-up / sarong', 'Flip flops / sandals', 'Sun hat / wide-brim cap', 'Sunglasses (UV400)', 'Light linen shirt or dress', 'Casual evening wear'] },
+                    { name: 'Sun & Skin', medical: false, items: ['Sunscreen SPF 50+ (face)', 'Sunscreen SPF 30+ (body)', 'After-sun lotion / aloe vera gel', 'Lip balm with SPF', 'Reef-safe sunscreen'] },
+                    { name: 'Beach Gear', medical: false, items: ['Beach towel', 'Beach bag', 'Waterproof phone case', 'Reusable insulated water bottle', 'Electrolyte sachets', 'Snorkel mask + fins (optional)', 'Underwater camera (optional)'] },
+                    { name: 'Medical Checklist', medical: true, items: ['Antihistamines (jellyfish / insect stings)', 'Antiseptic cream', 'Blister plasters', 'Eye drops (saltwater irritation)', 'Calamine lotion (sunburn relief)', 'Tweezers (sea urchin spines)', 'Seasickness tablets (if boat trips)', 'Hydrocortisone cream (rash / bites)', 'Oral rehydration salts (heat exhaustion)'] }
+                ]
+            },
+            mountains: {
+                label: 'Mountains', emoji: '🏔️',
+                categories: [
+                    { name: 'Layering System', medical: false, items: ['Moisture-wicking base layer (x2)', 'Fleece mid-layer', 'Waterproof / windproof jacket', 'Waterproof trousers', 'Hiking boots (well broken in)', 'Wool / thermal socks (x3)', 'Gloves + liner gloves', 'Warm hat / beanie', 'Buff / neck gaiter', 'Gaiters (snow / mud)'] },
+                    { name: 'Hiking Gear', medical: false, items: ['Trekking poles', 'Backpack (30–50L)', 'Headlamp + spare batteries', 'Topographic map + compass', 'GPS or downloaded offline maps', 'Emergency whistle', 'Thermal / mylar emergency blanket', 'Waterproof stuff sacks', 'High-energy snacks (nuts, bars)', 'Water purification tablets / filter'] },
+                    { name: 'Sun Protection', medical: false, items: ['Sunscreen SPF 50+ (UV intense at altitude)', 'Glacier / wraparound sunglasses', 'Sun hat / cap', 'Lip balm with SPF'] },
+                    { name: 'Medical Checklist', medical: true, items: ['Altitude sickness medication – Acetazolamide (consult doctor before trip)', 'Pulse oximeter (monitor O₂ saturation at altitude)', 'Blister care kit (plasters, moleskin, second skin)', 'Ibuprofen / diclofenac gel (muscle pain)', 'Knee support bandage', 'Antiseptic wipes + wound closure strips', 'Anti-nausea tablets', 'Antidiarrheal tablets', 'Full first aid kit', 'Emergency contact + evacuation insurance info'] }
+                ]
+            },
+            desert: {
+                label: 'Desert', emoji: '🏜️',
+                categories: [
+                    { name: 'Clothing', medical: false, items: ['Lightweight long-sleeve shirts (UV protection)', 'Lightweight breathable trousers', 'Wide-brim hat (non-negotiable)', 'Closed-toe shoes or sturdy sandals', 'Warm fleece / jacket (cold nights)', 'Buff / scarf (sandstorm protection)', 'Wraparound sunglasses (UV400)'] },
+                    { name: 'Hydration (Critical)', medical: false, items: ['Minimum 3–4L water capacity', 'Insulated water bottle or hydration bladder', 'Electrolyte sachets / tablets', 'Water purification tablets', 'Extra water stored in vehicle or camp'] },
+                    { name: 'Sun & Skin', medical: false, items: ['Sunscreen SPF 50+ (reapply every 2 hrs)', 'Lip balm with SPF', 'After-sun lotion', 'Rich moisturiser (air is very dry)'] },
+                    { name: 'Navigation & Safety', medical: false, items: ['Offline maps downloaded', 'Compass', 'GPS device', 'Satellite communicator (remote areas)', 'Emergency mirror + whistle', 'Emergency contact list'] },
+                    { name: 'Medical Checklist', medical: true, items: ['Oral rehydration salts (heat exhaustion / heat stroke)', 'Heat stroke first aid info (know the signs)', 'Antihistamines (scorpion / insect bites)', 'Antiseptic cream + bandages', 'Eye drops (dust / sand irritation)', 'Saline nasal spray (dry air)', 'Pain relievers', 'Antidiarrheal tablets', 'Prescription medications (keep insulated from heat)', 'Research local venomous species + antivenom locations'] }
+                ]
+            },
+            rainforest: {
+                label: 'Rainforest', emoji: '🌿',
+                categories: [
+                    { name: 'Clothing', medical: false, items: ['Quick-dry long-sleeve shirts (x3)', 'Quick-dry trousers (x2)', 'Waterproof hiking boots', 'Gaiters (snake / leech protection)', 'Rain poncho / waterproof jacket', 'Moisture-wicking socks (x4)', 'Extra clothes in waterproof bags'] },
+                    { name: 'Insect & Bug Protection', medical: false, items: ['DEET 30–50% insect repellent (essential)', 'Permethrin-treated clothing (optional)', 'Mosquito net (for sleeping)', 'Wear long sleeves + trousers at dusk', 'Insect repellent wristbands'] },
+                    { name: 'Gear', medical: false, items: ['Waterproof daypack', 'Dry bags (multiple sizes)', 'Waterproof phone case / pouch', 'Headlamp + spare batteries', 'Trekking poles', 'Quick-dry towel', 'Anti-fungal foot powder'] },
+                    { name: 'Medical Checklist', medical: true, items: ['Malaria prophylaxis – consult doctor, start BEFORE travel', 'Yellow fever vaccination certificate (required for many countries)', 'Typhoid vaccination (recommended)', 'Hepatitis A & B vaccination (recommended)', 'Antihistamines (insect bites / rashes)', 'Antiseptic cream + wipes', 'Hydrocortisone cream (anti-itch)', 'Blister care kit', 'Antidiarrheal tablets (Imodium)', 'Oral rehydration salts', 'Antifungal cream (jungle rot / athlete\'s foot)', 'Tweezers (tick / leech / thorn removal)', 'Water purification tablets or filter', 'EpiPen if allergic to stings (consult doctor)', 'Antibiotic course for traveller\'s diarrhoea (consult doctor)'] }
+                ]
+            }
+        };
+
+        function PresetPackingView() {
+            const [activeEnv, setActiveEnv] = React.useState('generic');
+            const [checked, setChecked] = React.useState({});
+
+            const toggleItem = (key) => {
+                setChecked(prev => ({ ...prev, [key]: !prev[key] }));
+            };
+
+            const resetList = () => {
+                const keys = Object.keys(checked).filter(k => k.startsWith(activeEnv + '-'));
+                setChecked(prev => {
+                    const next = { ...prev };
+                    keys.forEach(k => delete next[k]);
+                    return next;
+                });
+            };
+
+            const currentData = PACKING_DATA[activeEnv];
+            const allItems = currentData.categories.flatMap(c => c.items);
+            let globalIdx = 0;
+            const checkedCount = allItems.filter((_, i) => checked[`${activeEnv}-${i}`]).length;
+            const progress = allItems.length > 0 ? Math.round(checkedCount / allItems.length * 100) : 0;
+
+            return (
+                <div>
+                    <div className="packing-subtabs">
+                        {Object.entries(PACKING_DATA).map(([key, val]) => (
+                            <button
+                                key={key}
+                                className={`packing-subtab ${activeEnv === key ? 'active' : ''}`}
+                                onClick={() => setActiveEnv(key)}
+                            >
+                                {val.emoji} {val.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.25rem', gap:'1rem'}}>
+                        <div style={{flex:1}}>
+                            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'0.35rem'}}>
+                                <span style={{fontSize:'0.8rem', color:'var(--text-muted)', fontWeight:'600'}}>{checkedCount} of {allItems.length} packed</span>
+                                <span style={{fontSize:'0.8rem', color:'var(--primary)', fontWeight:'700'}}>{progress}%</span>
+                            </div>
+                            <div style={{height:'6px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
+                                <div style={{height:'100%', width:`${progress}%`, background:'linear-gradient(90deg, var(--primary), var(--success))', borderRadius:'999px', transition:'width 0.4s ease'}}></div>
+                            </div>
+                        </div>
+                        <button className="reset-btn" onClick={resetList}>Reset</button>
+                    </div>
+
+                    {currentData.categories.map((category, catIdx) => {
+                        const blockClass = `category-block${category.medical ? ' medical-block' : ''}`;
+                        const headerClass = `category-header${category.medical ? ' medical' : ''}`;
+                        return (
+                            <div key={catIdx} className={blockClass}>
+                                <div className={headerClass}>{category.medical ? '🩺 ' : ''}{category.name}</div>
+                                {category.items.map((item) => {
+                                    const key = `${activeEnv}-${globalIdx}`;
+                                    const isChecked = !!checked[key];
+                                    globalIdx++;
+                                    return (
+                                        <div key={key} className="checklist-item" onClick={() => toggleItem(key)}>
+                                            <div className={`circle-check ${isChecked ? 'checked' : ''}`}></div>
+                                            <span className={`checklist-item-label ${isChecked ? 'checked' : ''}`}>{item}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
                 </div>
             );
         }
