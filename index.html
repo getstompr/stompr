@@ -2177,6 +2177,53 @@
                             )}
                         </div>
                     </div>
+
+                    {/* ── Suggestions ── */}
+                    <div style={{marginTop:'3rem', paddingTop:'2.5rem', borderTop:'1px solid var(--border)'}}>
+                        <h2 style={{fontSize:'1.25rem', fontWeight:'700', marginBottom:'0.4rem', color:'var(--text)'}}>✨ Bucket List Inspiration</h2>
+                        <p style={{color:'var(--text-muted)', fontSize:'0.87rem', marginBottom:'1.5rem'}}>See how other travelers are building their dream lists.</p>
+                        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(255px, 1fr))', gap:'1.25rem'}}>
+                            {[
+                                { name:'Nomadic Matt', author:'Matt Kepnes', desc:'101 places to go before you die — a veteran blogger\'s essential list built over 15+ years of travel.', url:'https://www.nomadicmatt.com/travel-blogs/bucket-list-ideas/', img:'photo-1469854523086-cc02fe5d8800', tag:'Adventure' },
+                                { name:'The Blonde Abroad', author:'Kiersten Rich', desc:'A solo female traveler\'s curated bucket list spanning every continent with safety tips included.', url:'https://theblondeabroad.com/bucket-list/', img:'photo-1507525428034-b723cf961d3e', tag:'Solo Travel' },
+                                { name:'Expert Vagabond', author:'Matthew Karsten', desc:'The ultimate adventure bucket list for thrill-seekers — from volcano hikes to deep jungle treks.', url:'https://expertvagabond.com/travel-bucket-list/', img:'photo-1530521954074-e64f6810b32d', tag:'Adventure' },
+                                { name:'Adventurous Kate', author:'Kate McCulley', desc:'Once-in-a-lifetime experiences from a fearless solo traveler who\'s been to over 80 countries.', url:'https://www.adventurouskate.com/my-travel-bucket-list/', img:'photo-1488646953014-85cb44e25828', tag:'Solo Travel' },
+                                { name:'Hand Luggage Only', author:'Yaya & Lloyd', desc:'Stunning destinations and hidden gems — from iconic landmarks to off-the-beaten-path wonders.', url:'https://handluggageonly.co.uk/bucket-list/', img:'photo-1476514525535-07fb3b4ae5f1', tag:'Wanderlust' },
+                                { name:'World of Wanderlust', author:'Brooke Saward', desc:'A luxury traveler\'s take on the world\'s most extraordinary places to experience before you die.', url:'https://worldofwanderlust.com/bucket-list/', img:'photo-1500835556837-99ac94a94552', tag:'Luxury' },
+                            ].map(blog => (
+                                <a
+                                    key={blog.name}
+                                    href={blog.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{textDecoration:'none', display:'flex', flexDirection:'column', borderRadius:'14px', overflow:'hidden', border:'1px solid var(--border)', background:'var(--card-bg)', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', transition:'transform 0.18s, box-shadow 0.18s'}}
+                                    onMouseEnter={e => { e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.12)'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'; }}
+                                >
+                                    <div style={{position:'relative', height:'155px', overflow:'hidden', background:'#e8eaed'}}>
+                                        <img
+                                            src={`https://images.unsplash.com/${blog.img}?w=480&h=310&fit=crop&auto=format`}
+                                            alt=""
+                                            style={{width:'100%', height:'100%', objectFit:'cover'}}
+                                            loading="lazy"
+                                        />
+                                        <span style={{position:'absolute', top:'10px', left:'10px', background:'rgba(0,0,0,0.52)', color:'#fff', fontSize:'0.68rem', fontWeight:'600', padding:'3px 10px', borderRadius:'20px', letterSpacing:'0.04em'}}>
+                                            {blog.tag}
+                                        </span>
+                                    </div>
+                                    <div style={{padding:'1rem 1rem 1.1rem', flex:1, display:'flex', flexDirection:'column'}}>
+                                        <div style={{fontWeight:'700', fontSize:'0.95rem', color:'var(--text)', marginBottom:'0.1rem'}}>{blog.name}</div>
+                                        <div style={{fontSize:'0.76rem', color:'var(--text-muted)', marginBottom:'0.5rem'}}>by {blog.author}</div>
+                                        <p style={{fontSize:'0.81rem', color:'var(--text-muted)', lineHeight:'1.55', margin:'0 0 0.8rem', flex:1}}>{blog.desc}</p>
+                                        <span style={{fontSize:'0.8rem', fontWeight:'600', color:'var(--primary)'}}>Read more →</span>
+                                    </div>
+                                </a>
+                            ))}
+                        </div>
+                        <p style={{fontSize:'0.69rem', color:'#bbb', marginTop:'1.25rem', textAlign:'center'}}>
+                            Photos via <a href="https://unsplash.com" target="_blank" rel="noopener noreferrer" style={{color:'#bbb', textDecoration:'underline'}}>Unsplash</a> (Unsplash License) · All blog links are external and belong to their respective authors.
+                        </p>
+                    </div>
                 </div>
             );
         }
