@@ -1087,6 +1087,7 @@
                 const { data } = await supabaseClient
                     .from('places')
                     .select('*')
+                    .eq('user_id', session.user.id)
                     .order('created_at');
                 if (data) {
                     setPlaces(data);
