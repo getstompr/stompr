@@ -962,7 +962,13 @@
             const toFetch = [];
             (places || []).forEach(p => {
                 const key = p.name.toLowerCase();
-                if (cache[key]) { results[key] = cache[key]; }
+                // 1. Use DB-stored coords first
+                if (p.lat != null && p.lng != null) {
+                    results[key] = { lat: p.lat, lng: p.lng };
+                }
+                // 2. Fall back to localStorage cache
+                else if (cache[key]) { results[key] = cache[key]; }
+                // 3. Need to geocode
                 else { toFetch.push(p.name); }
             });
             // Geocode missing places via Nominatim (sequential to respect rate limits)
@@ -976,7 +982,6 @@
                         cache[name.toLowerCase()] = coord;
                     }
                 } catch {}
-                // Small delay to respect Nominatim rate limit
                 await new Promise(r => setTimeout(r, 300));
             }
             if (toFetch.length > 0) saveCoordsCache(cache);
@@ -1063,7 +1068,36 @@
                     .from('places')
                     .select('*')
                     .order('created_at');
-                if (data) setPlaces(data);
+                if (data) {
+                    setPlaces(data);
+                    // Backfill lat/lng for places missing coords
+                    const missing = data.filter(p => p.lat == null || p.lng == null);
+                    if (missing.length > 0) {
+                        const cache = getCoordsCache();
+                        for (const p of missing) {
+                            const key = p.name.toLowerCase();
+                            let coord = cache[key];
+                            if (!coord) {
+                                try {
+                                    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(p.name)}&format=json&limit=1`);
+                                    const geo = await res.json();
+                                    if (geo && geo[0]) {
+                                        coord = { lat: parseFloat(geo[0].lat), lng: parseFloat(geo[0].lon) };
+                                        cache[key] = coord;
+                                    }
+                                } catch {}
+                                await new Promise(r => setTimeout(r, 300));
+                            }
+                            if (coord) {
+                                await supabaseClient.from('places').update({ lat: coord.lat, lng: coord.lng }).eq('id', p.id);
+                                p.lat = coord.lat;
+                                p.lng = coord.lng;
+                            }
+                        }
+                        saveCoordsCache(cache);
+                        setPlaces([...data]);
+                    }
+                }
             };
 
             const handleSendCode = async (e) => {
@@ -1136,10 +1170,12 @@
                 await supabaseClient.auth.signOut();
             };
 
-            const addPlace = async (placeName, visited) => {
+            const addPlace = async (placeName, visited, lat, lng) => {
+                const row = { name: placeName, visited, user_id: session.user.id };
+                if (lat != null && lng != null) { row.lat = lat; row.lng = lng; }
                 const { data } = await supabaseClient
                     .from('places')
-                    .insert({ name: placeName, visited, user_id: session.user.id })
+                    .insert(row)
                     .select()
                     .single();
                 if (data) setPlaces([...places, data]);
@@ -3174,7 +3210,7 @@
                 e.preventDefault();
                 if (!placeName.trim()) return;
                 if (selectedCoords) cacheCoord(placeName.trim(), selectedCoords.lat, selectedCoords.lng);
-                onAddPlace(placeName.trim(), isVisited);
+                onAddPlace(placeName.trim(), isVisited, selectedCoords?.lat, selectedCoords?.lng);
                 setPlaceName('');
                 setSelectedCoords(null);
                 setSuggestions([]);
