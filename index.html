@@ -854,6 +854,12 @@
             const [loading, setLoading] = useState(true);
             const [isSignUp, setIsSignUp] = useState(false);
             const [authError, setAuthError] = useState('');
+            const [forgotStep, setForgotStep] = useState(null); // null | 'email' | 'code' | 'reset'
+            const [resetEmail, setResetEmail] = useState('');
+            const [resetCode, setResetCode] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            const [resetMsg, setResetMsg] = useState('');
+            const [resetLoading, setResetLoading] = useState(false);
             const [activeTab, setActiveTab] = useState('packing');
             const [places, setPlaces] = useState([]);
             const [profile, setProfile] = useState(null);
@@ -894,6 +900,43 @@
                     .select('*')
                     .order('created_at');
                 if (data) setPlaces(data);
+            };
+
+            const handleSendCode = async (e) => {
+                e.preventDefault();
+                setResetLoading(true); setResetMsg('');
+                const { error } = await supabaseClient.auth.signInWithOtp({
+                    email: resetEmail,
+                    options: { shouldCreateUser: false }
+                });
+                setResetLoading(false);
+                if (error) { setResetMsg(error.message); return; }
+                setForgotStep('code');
+                setResetMsg('');
+            };
+
+            const handleVerifyCode = async (e) => {
+                e.preventDefault();
+                setResetLoading(true); setResetMsg('');
+                const { error } = await supabaseClient.auth.verifyOtp({
+                    email: resetEmail,
+                    token: resetCode,
+                    type: 'email'
+                });
+                setResetLoading(false);
+                if (error) { setResetMsg('Invalid or expired code. Please try again.'); return; }
+                setForgotStep('reset');
+                setResetMsg('');
+            };
+
+            const handleSetNewPassword = async (e) => {
+                e.preventDefault();
+                setResetLoading(true); setResetMsg('');
+                const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+                setResetLoading(false);
+                if (error) { setResetMsg(error.message); return; }
+                setForgotStep(null);
+                setResetEmail(''); setResetCode(''); setNewPassword('');
             };
 
             const handleAuth = async (e) => {
@@ -970,62 +1013,149 @@
                         </header>
                         <div className="main-content">
                             <div className="auth-container">
-                                <h2 className="auth-title">{isSignUp ? 'Join Stompr' : 'Welcome Back'}</h2>
-                                {authError && <div className="auth-error">{authError}</div>}
-                                <form onSubmit={handleAuth}>
-                                    {isSignUp && (
-                                        <>
+
+                                {/* ── FORGOT PASSWORD FLOW ── */}
+                                {forgotStep === 'email' && (
+                                    <>
+                                        <h2 className="auth-title">Reset Password</h2>
+                                        <p style={{color:'var(--text-muted)', fontSize:'0.9rem', marginBottom:'1.25rem', textAlign:'center'}}>
+                                            Enter your email and we'll send a 6-digit verification code.
+                                        </p>
+                                        {resetMsg && <div className="auth-error">{resetMsg}</div>}
+                                        <form onSubmit={handleSendCode}>
                                             <div className="form-group">
-                                                <label>Full Name</label>
-                                                <input type="text" name="full_name" required />
+                                                <label>Email address</label>
+                                                <input type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="you@example.com" required />
+                                            </div>
+                                            <button type="submit" className="btn btn-primary" style={{width:'100%', marginTop:'1rem'}} disabled={resetLoading}>
+                                                {resetLoading ? 'Sending…' : 'Send Code'}
+                                            </button>
+                                        </form>
+                                        <div className="auth-toggle">
+                                            <button onClick={() => { setForgotStep(null); setResetMsg(''); }}>← Back to Sign In</button>
+                                        </div>
+                                    </>
+                                )}
+
+                                {forgotStep === 'code' && (
+                                    <>
+                                        <h2 className="auth-title">Enter Code</h2>
+                                        <p style={{color:'var(--text-muted)', fontSize:'0.9rem', marginBottom:'1.25rem', textAlign:'center'}}>
+                                            We sent a 6-digit code to <strong>{resetEmail}</strong>. Check your inbox.
+                                        </p>
+                                        {resetMsg && <div className="auth-error">{resetMsg}</div>}
+                                        <form onSubmit={handleVerifyCode}>
+                                            <div className="form-group">
+                                                <label>6-digit code</label>
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    maxLength="6"
+                                                    value={resetCode}
+                                                    onChange={e => setResetCode(e.target.value.replace(/\D/g,''))}
+                                                    placeholder="000000"
+                                                    required
+                                                    style={{letterSpacing:'0.3em', fontSize:'1.4rem', textAlign:'center', fontWeight:'700'}}
+                                                />
+                                            </div>
+                                            <button type="submit" className="btn btn-primary" style={{width:'100%', marginTop:'1rem'}} disabled={resetLoading || resetCode.length !== 6}>
+                                                {resetLoading ? 'Verifying…' : 'Verify Code'}
+                                            </button>
+                                        </form>
+                                        <div className="auth-toggle">
+                                            <button onClick={() => { setForgotStep('email'); setResetCode(''); setResetMsg(''); }}>← Resend code</button>
+                                        </div>
+                                    </>
+                                )}
+
+                                {forgotStep === 'reset' && (
+                                    <>
+                                        <h2 className="auth-title">New Password</h2>
+                                        <p style={{color:'var(--text-muted)', fontSize:'0.9rem', marginBottom:'1.25rem', textAlign:'center'}}>
+                                            Identity verified. Choose a new password for your account.
+                                        </p>
+                                        {resetMsg && <div className="auth-error">{resetMsg}</div>}
+                                        <form onSubmit={handleSetNewPassword}>
+                                            <div className="form-group">
+                                                <label>New Password</label>
+                                                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="At least 6 characters" minLength="6" required />
+                                            </div>
+                                            <button type="submit" className="btn btn-primary" style={{width:'100%', marginTop:'1rem'}} disabled={resetLoading}>
+                                                {resetLoading ? 'Saving…' : 'Set New Password'}
+                                            </button>
+                                        </form>
+                                    </>
+                                )}
+
+                                {/* ── NORMAL SIGN IN / SIGN UP ── */}
+                                {!forgotStep && (
+                                    <>
+                                        <h2 className="auth-title">{isSignUp ? 'Join Stompr' : 'Welcome Back'}</h2>
+                                        {authError && <div className="auth-error">{authError}</div>}
+                                        <form onSubmit={handleAuth}>
+                                            {isSignUp && (
+                                                <>
+                                                    <div className="form-group">
+                                                        <label>Full Name</label>
+                                                        <input type="text" name="full_name" required />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Username</label>
+                                                        <input type="text" name="username" required />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Country</label>
+                                                        <input type="text" name="country" placeholder="e.g., United States" required />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Date of Birth</label>
+                                                        <input type="date" name="dob" required />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Phone Number <span style={{color: 'var(--text-muted)', fontWeight: 400}}>(optional)</span></label>
+                                                        <input type="tel" name="phone" placeholder="e.g., +1 555 000 0000" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Travel Preferences</label>
+                                                        <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem'}}>
+                                                            {TRAVEL_PREFERENCES.map((pref, i) => (
+                                                                <label key={i} style={{display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '20px', padding: '0.3rem 0.75rem', cursor: 'pointer', fontSize: '0.85rem'}}>
+                                                                    <input type="checkbox" name={`pref_${i}`} style={{accentColor: 'var(--primary)'}} />
+                                                                    {pref}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                            <div className="form-group">
+                                                <label>Email</label>
+                                                <input type="email" name="email" required />
                                             </div>
                                             <div className="form-group">
-                                                <label>Username</label>
-                                                <input type="text" name="username" required />
-                                            </div>
-                                            <div className="form-group">
-                                                <label>Country</label>
-                                                <input type="text" name="country" placeholder="e.g., United States" required />
-                                            </div>
-                                            <div className="form-group">
-                                                <label>Date of Birth</label>
-                                                <input type="date" name="dob" required />
-                                            </div>
-                                            <div className="form-group">
-                                                <label>Phone Number <span style={{color: 'var(--text-muted)', fontWeight: 400}}>(optional)</span></label>
-                                                <input type="tel" name="phone" placeholder="e.g., +1 555 000 0000" />
-                                            </div>
-                                            <div className="form-group">
-                                                <label>Travel Preferences</label>
-                                                <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem'}}>
-                                                    {TRAVEL_PREFERENCES.map((pref, i) => (
-                                                        <label key={i} style={{display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '20px', padding: '0.3rem 0.75rem', cursor: 'pointer', fontSize: '0.85rem'}}>
-                                                            <input type="checkbox" name={`pref_${i}`} style={{accentColor: 'var(--primary)'}} />
-                                                            {pref}
-                                                        </label>
-                                                    ))}
+                                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.35rem'}}>
+                                                    <label style={{margin:0}}>Password</label>
+                                                    {!isSignUp && (
+                                                        <button type="button" onClick={() => { setForgotStep('email'); setAuthError(''); }} style={{background:'none', border:'none', color:'var(--primary)', fontSize:'0.82rem', fontWeight:'600', cursor:'pointer', fontFamily:'Inter, sans-serif', padding:0}}>
+                                                            Forgot password?
+                                                        </button>
+                                                    )}
                                                 </div>
+                                                <input type="password" name="password" required minLength="6" />
                                             </div>
-                                        </>
-                                    )}
-                                    <div className="form-group">
-                                        <label>Email</label>
-                                        <input type="email" name="email" required />
-                                    </div>
-                                    <div className="form-group">
-                                        <label>Password</label>
-                                        <input type="password" name="password" required minLength="6" />
-                                    </div>
-                                    <button type="submit" className="btn btn-primary" style={{width: '100%', marginTop: '1rem'}}>
-                                        {isSignUp ? 'Sign Up' : 'Log In'}
-                                    </button>
-                                </form>
-                                <div className="auth-toggle">
-                                    {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-                                    <button onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}>
-                                        {isSignUp ? 'Log In' : 'Sign Up'}
-                                    </button>
-                                </div>
+                                            <button type="submit" className="btn btn-primary" style={{width: '100%', marginTop: '1rem'}}>
+                                                {isSignUp ? 'Sign Up' : 'Log In'}
+                                            </button>
+                                        </form>
+                                        <div className="auth-toggle">
+                                            {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
+                                            <button onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}>
+                                                {isSignUp ? 'Log In' : 'Sign Up'}
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+
                             </div>
                         </div>
                     </div>
