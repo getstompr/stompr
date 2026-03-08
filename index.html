@@ -85,6 +85,93 @@
             align-items: center;
         }
 
+        .profile-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            font-weight: 700;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            user-select: none;
+            flex-shrink: 0;
+        }
+        .profile-avatar:hover {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(14,165,233,0.15);
+        }
+        .profile-wrap {
+            position: relative;
+        }
+        .profile-dropdown {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            min-width: 200px;
+            overflow: hidden;
+            z-index: 999;
+            animation: dropIn 0.15s ease;
+        }
+        @keyframes dropIn {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .profile-dropdown-header {
+            padding: 0.9rem 1rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .profile-dropdown-name {
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .profile-dropdown-email {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .profile-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            width: 100%;
+            padding: 0.7rem 1rem;
+            background: none;
+            border: none;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text);
+            cursor: pointer;
+            text-align: left;
+            transition: background 0.15s ease;
+        }
+        .profile-menu-item:hover { background: var(--bg); }
+        .profile-menu-item.danger { color: var(--danger); }
+        .profile-menu-item.danger:hover { background: #FEF2F2; }
+        .profile-dropdown-divider { height: 1px; background: var(--border); margin: 0; }
+        .profile-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 998;
+        }
+
         .btn {
             padding: 0.625rem 1.25rem;
             border: 1.5px solid var(--border);
@@ -854,6 +941,7 @@
             const [loading, setLoading] = useState(true);
             const [isSignUp, setIsSignUp] = useState(false);
             const [authError, setAuthError] = useState('');
+            const [profileOpen, setProfileOpen] = useState(false);
             const [forgotStep, setForgotStep] = useState(null); // null | 'email' | 'code' | 'reset'
             const [resetEmail, setResetEmail] = useState('');
             const [resetCode, setResetCode] = useState('');
@@ -1169,10 +1257,33 @@
                         <div className="header-content">
                             <div className="logo"><img src="Stompr_transparent.png" alt="Stompr" style={{height: '40px'}} /></div>
                             <div className="nav-buttons">
-                                <span style={{color: 'var(--text-muted)', marginRight: '0.5rem', alignSelf: 'center', fontSize: '0.9rem'}}>
-                                    {session.user.email}
-                                </span>
-                                <button className="btn" onClick={handleLogout}>Logout</button>
+                                <div className="profile-wrap">
+                                    {profileOpen && <div className="profile-overlay" onClick={() => setProfileOpen(false)} />}
+                                    <div
+                                        className="profile-avatar"
+                                        onClick={() => setProfileOpen(v => !v)}
+                                        title="Account"
+                                    >
+                                        {(profile?.full_name || session.user.email || '?')[0].toUpperCase()}
+                                    </div>
+                                    {profileOpen && (
+                                        <div className="profile-dropdown">
+                                            <div className="profile-dropdown-header">
+                                                <div className="profile-dropdown-name">{profile?.full_name || 'Traveler'}</div>
+                                                <div className="profile-dropdown-email">{session.user.email}</div>
+                                            </div>
+                                            <button className="profile-menu-item" onClick={() => { setActiveTab('profile'); setProfileOpen(false); }}>
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                                                My Profile
+                                            </button>
+                                            <div className="profile-dropdown-divider" />
+                                            <button className="profile-menu-item danger" onClick={() => { setProfileOpen(false); handleLogout(); }}>
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                                Log Out
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </header>
@@ -1208,12 +1319,6 @@
                                 >
                                     Budget & Expenses
                                 </button>
-                                <button
-                                    className={`tab ${activeTab === 'profile' ? 'active' : ''}`}
-                                    onClick={() => setActiveTab('profile')}
-                                >
-                                    Profile
-                                </button>
                             </div>
 
                             {activeTab === 'packing' && (
@@ -1238,11 +1343,17 @@
                             )}
 
                             {activeTab === 'profile' && (
-                                <ProfileView
-                                    session={session}
-                                    profile={profile}
-                                    onProfileUpdate={setProfile}
-                                />
+                                <div>
+                                    <button onClick={() => setActiveTab('ai')} style={{display:'flex', alignItems:'center', gap:'0.4rem', background:'none', border:'none', color:'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.85rem', cursor:'pointer', marginBottom:'1.25rem', padding:0}}>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                        Back
+                                    </button>
+                                    <ProfileView
+                                        session={session}
+                                        profile={profile}
+                                        onProfileUpdate={setProfile}
+                                    />
+                                </div>
                             )}
                         </div>
                     </div>
