@@ -1256,6 +1256,44 @@
                 );
             }
 
+            // ── Force name collection for existing users without a name ──
+            if (profile !== null && !profile?.full_name) {
+                const handleForceName = async (e) => {
+                    e.preventDefault();
+                    const name = e.target.full_name.value.trim();
+                    if (!name) return;
+                    await supabaseClient.from('profiles').upsert({ id: session.user.id, full_name: name }, { onConflict: 'id' });
+                    setProfile(p => ({ ...p, full_name: name }));
+                };
+                return (
+                    <div className="app-container">
+                        <div className="bg-pattern"></div>
+                        <header>
+                            <div className="header-content">
+                                <div className="logo"><a href="/"><img src="Stompr_transparent.png" alt="Stompr" style={{height:'40px'}} /></a></div>
+                            </div>
+                        </header>
+                        <div className="main-content">
+                            <div className="auth-container">
+                                <div style={{textAlign:'center', marginBottom:'1.5rem'}}>
+                                    <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>👋</div>
+                                    <h2 className="auth-title" style={{marginBottom:'0.4rem'}}>One quick thing</h2>
+                                    <p style={{color:'var(--text-muted)', fontSize:'0.9rem'}}>We just need your name before you continue.</p>
+                                </div>
+                                <form onSubmit={handleForceName}>
+                                    <div className="form-group">
+                                        <label>Full name</label>
+                                        <input type="text" name="full_name" placeholder="e.g. Jane Smith" required autoFocus />
+                                    </div>
+                                    <button type="submit" className="btn btn-primary" style={{width:'100%', marginTop:'1rem'}}>Continue →</button>
+                                </form>
+                            </div>
+                            <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 0.5rem'}}>With love from A&amp;E</footer>
+                        </div>
+                    </div>
+                );
+            }
+
             return (
                 <div className="app-container">
                     <div className="bg-pattern"></div>
