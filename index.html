@@ -771,6 +771,19 @@
             'sb_publishable_EqqOV0ptjB2hgIhqVsITUA_gDTB6L6n'
         );
 
+        const TRAVEL_PREFERENCES = [
+            'Adventure & Outdoors',
+            'Beach & Relaxation',
+            'Culture & History',
+            'Food & Cuisine',
+            'Nightlife',
+            'Budget Travel',
+            'Luxury Travel',
+            'Solo Travel',
+            'Family Travel',
+            'Road Trips',
+        ];
+
         function App() {
             const [session, setSession] = useState(null);
             const [loading, setLoading] = useState(true);
@@ -778,6 +791,7 @@
             const [authError, setAuthError] = useState('');
             const [activeTab, setActiveTab] = useState('packing');
             const [places, setPlaces] = useState([]);
+            const [profile, setProfile] = useState(null);
 
             useEffect(() => {
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
@@ -793,10 +807,21 @@
             useEffect(() => {
                 if (session) {
                     loadPlaces();
+                    loadProfile();
                 } else {
                     setPlaces([]);
+                    setProfile(null);
                 }
             }, [session]);
+
+            const loadProfile = async () => {
+                const { data } = await supabaseClient
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', session.user.id)
+                    .single();
+                if (data) setProfile(data);
+            };
 
             const loadPlaces = async () => {
                 const { data } = await supabaseClient
@@ -815,13 +840,19 @@
                     const fullName = e.target.full_name.value;
                     const username = e.target.username.value;
                     const country = e.target.country.value;
+                    const dob = e.target.dob.value;
+                    const phone = e.target.phone.value;
+                    const travelPrefs = TRAVEL_PREFERENCES.filter((_, i) => e.target[`pref_${i}`] && e.target[`pref_${i}`].checked);
                     const { data, error } = await supabaseClient.auth.signUp({ email, password });
                     if (error) { setAuthError(error.message); return; }
                     await supabaseClient.from('profiles').insert({
                         id: data.user.id,
                         full_name: fullName,
                         username,
-                        country
+                        country,
+                        dob: dob || null,
+                        phone: phone || null,
+                        travel_preferences: travelPrefs
                     });
                 } else {
                     const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
@@ -891,6 +922,25 @@
                                                 <label>Country</label>
                                                 <input type="text" name="country" placeholder="e.g., United States" required />
                                             </div>
+                                            <div className="form-group">
+                                                <label>Date of Birth</label>
+                                                <input type="date" name="dob" required />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Phone Number <span style={{color: 'var(--text-muted)', fontWeight: 400}}>(optional)</span></label>
+                                                <input type="tel" name="phone" placeholder="e.g., +1 555 000 0000" />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Travel Preferences</label>
+                                                <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem'}}>
+                                                    {TRAVEL_PREFERENCES.map((pref, i) => (
+                                                        <label key={i} style={{display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '20px', padding: '0.3rem 0.75rem', cursor: 'pointer', fontSize: '0.85rem'}}>
+                                                            <input type="checkbox" name={`pref_${i}`} style={{accentColor: 'var(--primary)'}} />
+                                                            {pref}
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         </>
                                     )}
                                     <div className="form-group">
@@ -957,6 +1007,12 @@
                                 >
                                     AI Travel Assistant
                                 </button>
+                                <button
+                                    className={`tab ${activeTab === 'profile' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('profile')}
+                                >
+                                    Profile
+                                </button>
                             </div>
 
                             {activeTab === 'packing' && (
@@ -975,8 +1031,104 @@
                             {activeTab === 'ai' && (
                                 <AIAssistantView />
                             )}
+
+                            {activeTab === 'profile' && (
+                                <ProfileView
+                                    session={session}
+                                    profile={profile}
+                                    onProfileUpdate={setProfile}
+                                />
+                            )}
                         </div>
                     </div>
+                </div>
+            );
+        }
+
+        function ProfileView({ session, profile, onProfileUpdate }) {
+            const [form, setForm] = useState({
+                full_name: profile?.full_name || '',
+                username: profile?.username || '',
+                country: profile?.country || '',
+                dob: profile?.dob || '',
+                phone: profile?.phone || '',
+                travel_preferences: profile?.travel_preferences || [],
+            });
+            const [saving, setSaving] = useState(false);
+            const [message, setMessage] = useState('');
+
+            const togglePref = (pref) => {
+                setForm(f => ({
+                    ...f,
+                    travel_preferences: f.travel_preferences.includes(pref)
+                        ? f.travel_preferences.filter(p => p !== pref)
+                        : [...f.travel_preferences, pref]
+                }));
+            };
+
+            const handleSave = async (e) => {
+                e.preventDefault();
+                setSaving(true);
+                setMessage('');
+                const { data, error } = await supabaseClient
+                    .from('profiles')
+                    .upsert({ id: session.user.id, ...form })
+                    .select()
+                    .single();
+                setSaving(false);
+                if (error) {
+                    setMessage('Error saving profile: ' + error.message);
+                } else {
+                    onProfileUpdate(data);
+                    setMessage('Profile saved!');
+                }
+            };
+
+            return (
+                <div style={{maxWidth: '600px', margin: '0 auto'}}>
+                    <h2 style={{marginBottom: '1.5rem', fontSize: '1.4rem', fontWeight: 600}}>Your Profile</h2>
+                    <form onSubmit={handleSave}>
+                        <div className="form-group">
+                            <label>Full Name</label>
+                            <input type="text" value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} required />
+                        </div>
+                        <div className="form-group">
+                            <label>Username</label>
+                            <input type="text" value={form.username} onChange={e => setForm({...form, username: e.target.value})} required />
+                        </div>
+                        <div className="form-group">
+                            <label>Country</label>
+                            <input type="text" value={form.country} onChange={e => setForm({...form, country: e.target.value})} placeholder="e.g., United States" />
+                        </div>
+                        <div className="form-group">
+                            <label>Date of Birth</label>
+                            <input type="date" value={form.dob} onChange={e => setForm({...form, dob: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                            <label>Phone Number <span style={{color: 'var(--text-muted)', fontWeight: 400}}>(optional)</span></label>
+                            <input type="tel" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="e.g., +1 555 000 0000" />
+                        </div>
+                        <div className="form-group">
+                            <label>Travel Preferences</label>
+                            <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem'}}>
+                                {TRAVEL_PREFERENCES.map((pref, i) => {
+                                    const selected = form.travel_preferences.includes(pref);
+                                    return (
+                                        <label key={i} style={{display: 'flex', alignItems: 'center', gap: '0.35rem', background: selected ? 'var(--primary)' : 'var(--bg-secondary)', color: selected ? '#fff' : 'inherit', border: '1px solid ' + (selected ? 'var(--primary)' : 'var(--border)'), borderRadius: '20px', padding: '0.3rem 0.75rem', cursor: 'pointer', fontSize: '0.85rem', transition: 'all 0.15s'}}>
+                                            <input type="checkbox" checked={selected} onChange={() => togglePref(pref)} style={{display: 'none'}} />
+                                            {pref}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1.5rem'}}>
+                            <button type="submit" className="btn btn-primary" disabled={saving}>
+                                {saving ? 'Saving...' : 'Save Profile'}
+                            </button>
+                            {message && <span style={{color: message.startsWith('Error') ? 'var(--danger)' : 'green', fontSize: '0.9rem'}}>{message}</span>}
+                        </div>
+                    </form>
                 </div>
             );
         }
