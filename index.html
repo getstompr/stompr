@@ -988,15 +988,35 @@
             return results;
         }
 
-        function addMarkersToMap(map, places, coordsMap) {
+        function addMarkersToMap(map, places, coordsMap, opts) {
             const markers = [];
             const bounds = [];
+            const avatarUrl = opts && opts.avatarUrl;
+            const avatarInitial = opts && opts.avatarInitial || '?';
+            const avatarColor = opts && opts.avatarColor || '#0EA5E9';
+            const markerSize = opts && opts.large ? 38 : 7;
             (places || []).forEach(place => {
                 const coord = coordsMap[place.name.toLowerCase()];
                 if (!coord) return;
                 const color = place.visited ? '#22C55E' : '#EF4444';
                 const label = place.visited ? 'Visited' : 'Bucket List';
-                const m = L.circleMarker([coord.lat, coord.lng], { radius: 7, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
+                let m;
+                if (opts && opts.useAvatar) {
+                    const sz = markerSize;
+                    const imgHtml = avatarUrl
+                        ? '<img src="' + avatarUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />'
+                        : '<span style="color:#fff;font-weight:700;font-size:' + (sz * 0.45) + 'px;">' + avatarInitial + '</span>';
+                    const icon = L.divIcon({
+                        className: '',
+                        html: '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;border:3px solid ' + color + ';overflow:hidden;display:flex;align-items:center;justify-content:center;background:' + (avatarUrl ? '#eee' : avatarColor) + ';box-shadow:0 2px 8px rgba(0,0,0,0.25);">' + imgHtml + '</div>',
+                        iconSize: [sz, sz],
+                        iconAnchor: [sz / 2, sz / 2],
+                        popupAnchor: [0, -(sz / 2)]
+                    });
+                    m = L.marker([coord.lat, coord.lng], { icon: icon }).addTo(map);
+                } else {
+                    m = L.circleMarker([coord.lat, coord.lng], { radius: 7, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
+                }
                 m.bindPopup(`<strong>${place.name}</strong><br/><span style="color:${color};font-weight:700">${label}</span>`);
                 markers.push(m);
                 bounds.push([coord.lat, coord.lng]);
@@ -2950,8 +2970,12 @@
             const [userPosts, setUserPosts] = useState([]);
             const [userPlaces, setUserPlaces] = useState([]);
             const [loading, setLoading] = useState(true);
+            const [showFullMap, setShowFullMap] = useState(false);
+            const [fullMapFilter, setFullMapFilter] = useState('all'); // 'all', 'visited', 'bucket'
             const mapRef = useRef(null);
             const mapObj = useRef(null);
+            const fullMapRef = useRef(null);
+            const fullMapObj = useRef(null);
             const isFriend = friendIds.includes(userId);
 
             useEffect(() => {
@@ -3002,13 +3026,40 @@
                 }).addTo(map);
                 mapObj.current = map;
                 setTimeout(() => map.invalidateSize(), 200);
-                // Add markers with geocoding
+                const avatarUrl = profileData?.avatar_url || '';
+                const avatarInitial2 = (profileData?.full_name || userName || '?')[0].toUpperCase();
+                const avatarColor2 = avatarColors[(profileData?.full_name || '').length % avatarColors.length];
                 resolveAllCoords(userPlaces).then(coordsMap => {
                     if (!mapObj.current) return;
-                    addMarkersToMap(mapObj.current, userPlaces, coordsMap);
+                    addMarkersToMap(mapObj.current, userPlaces, coordsMap, { useAvatar: true, avatarUrl: avatarUrl, avatarInitial: avatarInitial2, avatarColor: avatarColor2 });
                 });
                 return () => { map.remove(); mapObj.current = null; };
             }, [loading, userPlaces]);
+
+            // ── Full-screen map ──
+            useEffect(() => {
+                if (!showFullMap) {
+                    if (fullMapObj.current) { fullMapObj.current.remove(); fullMapObj.current = null; }
+                    return;
+                }
+                const timer = setTimeout(() => {
+                    if (!fullMapRef.current || fullMapObj.current) return;
+                    const map = L.map(fullMapRef.current, { zoomControl: true, scrollWheelZoom: true }).setView([20, 0], 2);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                    }).addTo(map);
+                    fullMapObj.current = map;
+                    const filtered = fullMapFilter === 'all' ? userPlaces : fullMapFilter === 'visited' ? userPlaces.filter(p => p.visited) : userPlaces.filter(p => !p.visited);
+                    const avatarUrl = profileData?.avatar_url || '';
+                    const avatarInitial2 = (profileData?.full_name || userName || '?')[0].toUpperCase();
+                    const avatarColor2 = avatarColors[(profileData?.full_name || '').length % avatarColors.length];
+                    resolveAllCoords(filtered).then(coordsMap => {
+                        if (!fullMapObj.current) return;
+                        addMarkersToMap(fullMapObj.current, filtered, coordsMap, { useAvatar: true, large: true, avatarUrl: avatarUrl, avatarInitial: avatarInitial2, avatarColor: avatarColor2 });
+                    });
+                }, 100);
+                return () => { clearTimeout(timer); if (fullMapObj.current) { fullMapObj.current.remove(); fullMapObj.current = null; } };
+            }, [showFullMap, fullMapFilter]);
 
             const toggleLike = async (id) => {
                 const post = userPosts.find(p => p.id === id);
@@ -3067,10 +3118,14 @@
                     </button>
 
                     {/* ── Timeline Map (cover photo equivalent) ── */}
-                    <div style={{borderRadius:'16px', overflow:'hidden', border:'1px solid var(--border)', marginBottom:'1rem', position:'relative'}}>
+                    <div onClick={() => { setFullMapFilter('all'); setShowFullMap(true); }} style={{borderRadius:'16px', overflow:'hidden', border:'1px solid var(--border)', marginBottom:'1rem', position:'relative', cursor:'pointer'}}>
                         <div ref={mapRef} style={{height:'220px', width:'100%'}} />
                         <div style={{position:'absolute', bottom:'0.5rem', right:'0.75rem', background:'rgba(0,0,0,0.55)', color:'#fff', fontSize:'0.7rem', padding:'3px 10px', borderRadius:'12px', fontWeight:'600', backdropFilter:'blur(4px)'}}>
                             {visitedCount} visited · {bucketCount} bucket list
+                        </div>
+                        <div style={{position:'absolute', top:'0.5rem', right:'0.75rem', background:'rgba(0,0,0,0.55)', color:'#fff', fontSize:'0.7rem', padding:'3px 10px', borderRadius:'12px', fontWeight:'600', backdropFilter:'blur(4px)', display:'flex', alignItems:'center', gap:'4px'}}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                            Expand
                         </div>
                     </div>
 
@@ -3106,12 +3161,12 @@
                                 <div style={{fontWeight:'700', fontSize:'1.1rem', color:'var(--text)'}}>{userPosts.length}</div>
                                 <div style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>Posts</div>
                             </div>
-                            <div style={{textAlign:'center'}}>
-                                <div style={{fontWeight:'700', fontSize:'1.1rem', color:'var(--text)'}}>{visitedCount}</div>
+                            <div onClick={() => { setFullMapFilter('visited'); setShowFullMap(true); }} style={{textAlign:'center', cursor:'pointer', padding:'0.25rem 0.5rem', borderRadius:'8px', transition:'background 0.15s'}} onMouseEnter={e => e.currentTarget.style.background='rgba(14,165,233,0.08)'} onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                <div style={{fontWeight:'700', fontSize:'1.1rem', color:'var(--primary)'}}>{visitedCount}</div>
                                 <div style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>Places Visited</div>
                             </div>
-                            <div style={{textAlign:'center'}}>
-                                <div style={{fontWeight:'700', fontSize:'1.1rem', color:'var(--text)'}}>{bucketCount}</div>
+                            <div onClick={() => { setFullMapFilter('bucket'); setShowFullMap(true); }} style={{textAlign:'center', cursor:'pointer', padding:'0.25rem 0.5rem', borderRadius:'8px', transition:'background 0.15s'}} onMouseEnter={e => e.currentTarget.style.background='rgba(14,165,233,0.08)'} onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                <div style={{fontWeight:'700', fontSize:'1.1rem', color:'var(--primary)'}}>{bucketCount}</div>
                                 <div style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>Bucket List</div>
                             </div>
                             {profileData?.country && (
@@ -3156,6 +3211,34 @@
                         const tag = TAGS.find(t => t.value === post.tag);
                         return <PostCard key={post.id} post={post} tag={tag} timeAgo={timeAgo} userName={currentUserName} currentUserId={currentUserId} onLike={() => toggleLike(post.id)} onComment={(text) => addComment(post.id, text)} onDelete={() => {}} onViewProfile={onViewProfile} />;
                     })}
+
+                    {/* ── Full-screen map modal ── */}
+                    {showFullMap && (
+                        <div className="tab-content-enter" style={{position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:9999, background:'var(--bg)', display:'flex', flexDirection:'column'}}>
+                            <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.75rem 1rem', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', flexShrink:0}}>
+                                <button onClick={() => setShowFullMap(false)} style={{display:'flex', alignItems:'center', gap:'0.4rem', background:'none', border:'none', color:'var(--text)', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.9rem', cursor:'pointer', padding:'0.4rem 0'}}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                    Back
+                                </button>
+                                <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                                    <div style={{width:'28px', height:'28px', borderRadius:'50%', overflow:'hidden', background:profColor, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:'0.75rem', fontWeight:'700'}}>
+                                        {profileData?.avatar_url ? <img src={profileData.avatar_url} alt="" style={{width:'100%', height:'100%', objectFit:'cover'}} /> : profInitial}
+                                    </div>
+                                    <span style={{fontWeight:'700', fontSize:'0.95rem', color:'var(--text)'}}>{profName}'s Map</span>
+                                </div>
+                                <div style={{display:'flex', gap:'0.35rem'}}>
+                                    {[{v:'all',l:'All'},{v:'visited',l:'Visited'},{v:'bucket',l:'Bucket List'}].map(f => (
+                                        <button key={f.v} onClick={() => { if (fullMapObj.current) { fullMapObj.current.remove(); fullMapObj.current = null; } setFullMapFilter(f.v); }} style={{padding:'0.3rem 0.7rem', borderRadius:'16px', border: fullMapFilter === f.v ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: fullMapFilter === f.v ? 'rgba(14,165,233,0.08)' : 'var(--card-bg)', color: fullMapFilter === f.v ? 'var(--primary)' : 'var(--text-muted)', fontWeight:'600', fontSize:'0.78rem', cursor:'pointer', fontFamily:'Inter, sans-serif'}}>{f.l}</button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div ref={fullMapRef} style={{flex:1}} />
+                            <div style={{padding:'0.5rem 1rem', background:'var(--card-bg)', borderTop:'1px solid var(--border)', display:'flex', gap:'1.5rem', justifyContent:'center', fontSize:'0.78rem', color:'var(--text-muted)', flexShrink:0}}>
+                                <span><span style={{display:'inline-block', width:'10px', height:'10px', borderRadius:'50%', background:'#22C55E', marginRight:'4px'}}></span> Visited ({visitedCount})</span>
+                                <span><span style={{display:'inline-block', width:'10px', height:'10px', borderRadius:'50%', background:'#EF4444', marginRight:'4px'}}></span> Bucket List ({bucketCount})</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
