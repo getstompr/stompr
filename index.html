@@ -665,10 +665,22 @@
                 setAuthError('');
                 const email = e.target.email.value;
                 const password = e.target.password.value;
-                const { error } = isSignUp
-                    ? await supabaseClient.auth.signUp({ email, password })
-                    : await supabaseClient.auth.signInWithPassword({ email, password });
-                if (error) setAuthError(error.message);
+                if (isSignUp) {
+                    const fullName = e.target.full_name.value;
+                    const username = e.target.username.value;
+                    const country = e.target.country.value;
+                    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+                    if (error) { setAuthError(error.message); return; }
+                    await supabaseClient.from('profiles').insert({
+                        id: data.user.id,
+                        full_name: fullName,
+                        username,
+                        country
+                    });
+                } else {
+                    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+                    if (error) setAuthError(error.message);
+                }
             };
 
             const handleLogout = async () => {
@@ -771,6 +783,22 @@
                                 <h2 className="auth-title">{isSignUp ? 'Join Wanderlist' : 'Welcome Back'}</h2>
                                 {authError && <div className="auth-error">{authError}</div>}
                                 <form onSubmit={handleAuth}>
+                                    {isSignUp && (
+                                        <>
+                                            <div className="form-group">
+                                                <label>Full Name</label>
+                                                <input type="text" name="full_name" required />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Username</label>
+                                                <input type="text" name="username" required />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Country</label>
+                                                <input type="text" name="country" placeholder="e.g., United States" required />
+                                            </div>
+                                        </>
+                                    )}
                                     <div className="form-group">
                                         <label>Email</label>
                                         <input type="email" name="email" required />
