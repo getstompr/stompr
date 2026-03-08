@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:imgur.com)"
+      "WebFetch(domain:imgur.com)",
+      "Bash(python3 -c \":*)"
     ]
   }
 }

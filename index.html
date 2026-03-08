@@ -1273,10 +1273,17 @@
             const [travelers, setTravelers] = React.useState([]);
             const [logs, setLogs] = React.useState([]);
             const [newName, setNewName] = React.useState('');
-            const [showLogForm, setShowLogForm] = React.useState(false);
+            const [entryMode, setEntryMode] = React.useState(null); // null | 'receipt' | 'manual'
             const [currency, setCurrency] = React.useState('USD');
-            const [logForm, setLogForm] = React.useState({ description: '', amount: '', paidBy: '', splitAmong: [], date: new Date().toISOString().split('T')[0] });
+            const [logForm, setLogForm] = React.useState({ description: '', amount: '', paidBy: '', splitAmong: [], category: 'Food', date: new Date().toISOString().split('T')[0] });
+            const [apiKey, setApiKey] = React.useState(() => localStorage.getItem('stompr_ak') || '');
+            const [showApiKey, setShowApiKey] = React.useState(false);
+            const [receiptPreview, setReceiptPreview] = React.useState(null);
+            const [analyzing, setAnalyzing] = React.useState(false);
+            const [analysisNote, setAnalysisNote] = React.useState('');
             const currencies = ['USD','EUR','GBP','JPY','AUD','CAD','CHF','CNY','INR','MXN','BRL','SGD','HKD','THB','TRY'];
+            const expCategories = ['Food', 'Transport', 'Accommodation', 'Activities', 'Shopping', 'Health', 'Other'];
+            const catColors = { Food:'#F59E0B', Transport:'#0EA5E9', Accommodation:'#8B5CF6', Activities:'#22C55E', Shopping:'#EC4899', Health:'#EF4444', Other:'#6B7280' };
 
             const addTraveler = (e) => {
                 e.preventDefault();
@@ -1300,12 +1307,86 @@
                 }));
             };
 
+            const resetForm = () => {
+                setLogForm({ description: '', amount: '', paidBy: '', splitAmong: [], category: 'Food', date: new Date().toISOString().split('T')[0] });
+                setEntryMode(null);
+                setReceiptPreview(null);
+                setAnalysisNote('');
+            };
+
             const handleLogSubmit = (e) => {
                 e.preventDefault();
                 if (!logForm.description.trim() || !logForm.amount || !logForm.paidBy || logForm.splitAmong.length === 0) return;
                 setLogs(prev => [...prev, { ...logForm, id: Date.now(), amount: parseFloat(logForm.amount) }]);
-                setLogForm({ description: '', amount: '', paidBy: '', splitAmong: [], date: new Date().toISOString().split('T')[0] });
-                setShowLogForm(false);
+                resetForm();
+            };
+
+            const saveApiKey = (key) => {
+                setApiKey(key);
+                localStorage.setItem('stompr_ak', key);
+            };
+
+            const handleReceiptUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async (ev) => {
+                    const dataUrl = ev.target.result;
+                    setReceiptPreview(dataUrl);
+                    setAnalysisNote('');
+
+                    if (!apiKey) {
+                        setAnalysisNote('No API key set — fill in the details manually below.');
+                        setLogForm(f => ({...f, splitAmong: [...travelers]}));
+                        setEntryMode('manual');
+                        return;
+                    }
+
+                    setAnalyzing(true);
+                    try {
+                        const [header, b64] = dataUrl.split(',');
+                        const mime = header.match(/:(.*?);/)[1];
+                        const res = await fetch('https://api.anthropic.com/v1/messages', {
+                            method: 'POST',
+                            headers: {
+                                'x-api-key': apiKey,
+                                'anthropic-version': '2023-06-01',
+                                'content-type': 'application/json',
+                                'anthropic-dangerous-direct-browser-access': 'true'
+                            },
+                            body: JSON.stringify({
+                                model: 'claude-haiku-4-5-20251001',
+                                max_tokens: 300,
+                                messages: [{
+                                    role: 'user',
+                                    content: [
+                                        { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+                                        { type: 'text', text: 'Analyze this receipt. Reply with ONLY a JSON object, nothing else: {"description":"merchant or vendor name","total":number,"category":"Food or Transport or Accommodation or Activities or Shopping or Health or Other","date":"YYYY-MM-DD or empty string"}' }
+                                    ]
+                                }]
+                            })
+                        });
+                        const data = await res.json();
+                        const raw = data.content[0].text.trim().replace(/```json|```/g, '').trim();
+                        const parsed = JSON.parse(raw);
+                        setLogForm(f => ({
+                            ...f,
+                            description: parsed.description || '',
+                            amount: parsed.total ? String(parsed.total) : '',
+                            category: parsed.category || 'Other',
+                            date: parsed.date || f.date,
+                            splitAmong: [...travelers]
+                        }));
+                        setAnalysisNote('Receipt scanned — review and confirm below.');
+                    } catch (err) {
+                        setAnalysisNote('Could not read receipt automatically. Fill in details manually.');
+                        setLogForm(f => ({...f, splitAmong: [...travelers]}));
+                    } finally {
+                        setAnalyzing(false);
+                        setEntryMode('manual');
+                    }
+                };
+                reader.readAsDataURL(file);
             };
 
             const balances = React.useMemo(() => {
@@ -1340,6 +1421,23 @@
 
             return (
                 <div>
+                    {/* API key settings */}
+                    <div style={{marginBottom:'1.25rem', display:'flex', justifyContent:'flex-end'}}>
+                        <button onClick={() => setShowApiKey(v => !v)} style={{background:'none', border:'none', fontSize:'0.8rem', color:'var(--text-muted)', cursor:'pointer', fontFamily:'Inter, sans-serif', textDecoration:'underline'}}>
+                            {showApiKey ? 'Hide' : '⚙️ Receipt scanning key'}
+                        </button>
+                    </div>
+                    {showApiKey && (
+                        <div className="category-block" style={{marginBottom:'1.25rem', background:'#F8FAFF', borderColor:'#BAE6FD'}}>
+                            <div style={{fontWeight:'700', fontSize:'0.85rem', color:'var(--primary)', marginBottom:'0.4rem'}}>Anthropic API Key</div>
+                            <p style={{fontSize:'0.8rem', color:'var(--text-muted)', marginBottom:'0.75rem'}}>Used only for receipt scanning. Stored locally on your device — never sent to our servers.</p>
+                            <div style={{display:'flex', gap:'0.5rem'}}>
+                                <input type="password" value={apiKey} onChange={e => saveApiKey(e.target.value)} placeholder="sk-ant-..." style={{flex:1, padding:'0.5rem 0.75rem', border:'1.5px solid var(--border)', borderRadius:'var(--radius-sm)', fontFamily:'Inter, sans-serif', fontSize:'0.85rem'}} />
+                                <button className="btn" onClick={() => setShowApiKey(false)} style={{padding:'0.5rem 0.75rem', fontSize:'0.85rem'}}>Done</button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Travelers */}
                     <div className="category-block" style={{marginBottom:'1.25rem'}}>
                         <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>Travelers in this trip</div>
@@ -1368,26 +1466,55 @@
                                 </div>
                                 <div style={{background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'1rem', textAlign:'center'}}>
                                     <div style={{fontSize:'0.78rem', color:'var(--text-muted)', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.3rem'}}>Per Person (avg)</div>
-                                    <div style={{fontSize:'1.3rem', fontWeight:'800', color:'var(--primary)'}}>{currency} {travelers.length > 0 ? (totalSpent / travelers.length).toFixed(2) : '0.00'}</div>
+                                    <div style={{fontSize:'1.3rem', fontWeight:'800', color:'var(--primary)'}}>{currency} {(totalSpent / travelers.length).toFixed(2)}</div>
                                 </div>
                             </div>
 
-                            {/* Currency + Add button */}
+                            {/* Currency row */}
                             <div style={{display:'flex', gap:'0.75rem', alignItems:'center', marginBottom:'1.25rem'}}>
                                 <select className="country-select" value={currency} onChange={e => setCurrency(e.target.value)} style={{width:'100px', flex:'none'}}>
                                     {currencies.map(c => <option key={c}>{c}</option>)}
                                 </select>
-                                {!showLogForm && <button className="btn btn-primary" style={{flex:1}} onClick={() => { setLogForm(f => ({...f, splitAmong: [...travelers]})); setShowLogForm(true); }}>+ Log Shared Expense</button>}
+                                {entryMode === null && (
+                                    <div style={{display:'flex', gap:'0.5rem', flex:1}}>
+                                        <label style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'0.3rem', border:'1.5px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.65rem', cursor:'pointer', background:'var(--surface)', transition:'all 0.2s'}}>
+                                            <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handleReceiptUpload} />
+                                            <span style={{fontSize:'1.3rem'}}>📷</span>
+                                            <span style={{fontSize:'0.78rem', fontWeight:'700', color:'var(--text)'}}>Upload Receipt</span>
+                                        </label>
+                                        <button onClick={() => { setLogForm(f => ({...f, splitAmong: [...travelers]})); setEntryMode('manual'); }} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'0.3rem', border:'1.5px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.65rem', cursor:'pointer', background:'var(--surface)', fontFamily:'Inter, sans-serif', transition:'all 0.2s'}}>
+                                            <span style={{fontSize:'1.3rem'}}>✏️</span>
+                                            <span style={{fontSize:'0.78rem', fontWeight:'700', color:'var(--text)'}}>Enter Manually</span>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
-                            {/* Log form */}
-                            {showLogForm && (
+                            {/* Receipt upload state */}
+                            {entryMode === 'receipt' && analyzing && (
+                                <div className="category-block" style={{marginBottom:'1.25rem', textAlign:'center', padding:'2rem'}}>
+                                    <div style={{fontSize:'2rem', marginBottom:'0.5rem'}}>🔍</div>
+                                    <p style={{fontWeight:'600', color:'var(--primary)'}}>Scanning receipt…</p>
+                                    <p style={{fontSize:'0.82rem', color:'var(--text-muted)', marginTop:'0.25rem'}}>Identifying merchant, total, and category</p>
+                                </div>
+                            )}
+
+                            {/* Entry form (manual or post-receipt) */}
+                            {entryMode === 'manual' && (
                                 <div className="category-block" style={{marginBottom:'1.25rem'}}>
-                                    <div style={{fontWeight:'700', marginBottom:'1rem'}}>New Shared Expense</div>
+                                    {receiptPreview && (
+                                        <div style={{marginBottom:'1rem'}}>
+                                            <img src={receiptPreview} alt="Receipt" style={{maxHeight:'160px', borderRadius:'var(--radius-sm)', objectFit:'contain', border:'1px solid var(--border)'}} />
+                                            {analysisNote && <div style={{marginTop:'0.4rem', fontSize:'0.8rem', color: analysisNote.includes('scanned') ? 'var(--success)' : 'var(--text-muted)', fontWeight:'500'}}>{analysisNote.includes('scanned') ? '✓ ' : ''}{analysisNote}</div>}
+                                        </div>
+                                    )}
+                                    <div style={{fontWeight:'700', marginBottom:'1rem'}}>
+                                        {receiptPreview ? 'Review & Confirm' : 'New Shared Expense'}
+                                    </div>
                                     <form onSubmit={handleLogSubmit}>
                                         <div style={{display:'grid', gap:'0.75rem'}}>
                                             <div className="form-group" style={{margin:0}}>
-                                                <label>What was it?</label>
+                                                <label>Description</label>
                                                 <input type="text" value={logForm.description} onChange={e => setLogForm({...logForm, description: e.target.value})} placeholder="e.g. Hotel room, group dinner" required />
                                             </div>
                                             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
@@ -1396,43 +1523,43 @@
                                                     <input type="number" min="0" step="0.01" value={logForm.amount} onChange={e => setLogForm({...logForm, amount: e.target.value})} placeholder="0.00" required />
                                                 </div>
                                                 <div className="form-group" style={{margin:0}}>
+                                                    <label>Category</label>
+                                                    <select className="country-select" value={logForm.category} onChange={e => setLogForm({...logForm, category: e.target.value})}>
+                                                        {expCategories.map(c => <option key={c}>{c}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+                                                <div className="form-group" style={{margin:0}}>
+                                                    <label>Paid by</label>
+                                                    <select className="country-select" value={logForm.paidBy} onChange={e => setLogForm({...logForm, paidBy: e.target.value})} required>
+                                                        <option value="">-- Select --</option>
+                                                        {travelers.map(t => <option key={t}>{t}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="form-group" style={{margin:0}}>
                                                     <label>Date</label>
                                                     <input type="date" value={logForm.date} onChange={e => setLogForm({...logForm, date: e.target.value})} />
                                                 </div>
-                                            </div>
-                                            <div className="form-group" style={{margin:0}}>
-                                                <label>Paid by</label>
-                                                <select className="country-select" value={logForm.paidBy} onChange={e => setLogForm({...logForm, paidBy: e.target.value})} required>
-                                                    <option value="">-- Select --</option>
-                                                    {travelers.map(t => <option key={t}>{t}</option>)}
-                                                </select>
                                             </div>
                                             <div>
                                                 <label style={{display:'block', fontSize:'0.85rem', fontWeight:'600', color:'var(--text)', marginBottom:'0.5rem'}}>Split between</label>
                                                 <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem'}}>
                                                     {travelers.map(t => (
-                                                        <button key={t} type="button"
-                                                            onClick={() => toggleSplit(t)}
-                                                            style={{
-                                                                padding:'0.35rem 0.85rem',
-                                                                borderRadius:'999px',
-                                                                border:`1.5px solid ${logForm.splitAmong.includes(t) ? 'var(--primary)' : 'var(--border)'}`,
-                                                                background: logForm.splitAmong.includes(t) ? '#EFF6FF' : 'transparent',
-                                                                color: logForm.splitAmong.includes(t) ? 'var(--primary)' : 'var(--text-muted)',
-                                                                fontWeight:'600', fontSize:'0.85rem', cursor:'pointer', fontFamily:'Inter, sans-serif'
-                                                            }}
-                                                        >{t}</button>
+                                                        <button key={t} type="button" onClick={() => toggleSplit(t)} style={{padding:'0.35rem 0.85rem', borderRadius:'999px', border:`1.5px solid ${logForm.splitAmong.includes(t) ? 'var(--primary)' : 'var(--border)'}`, background: logForm.splitAmong.includes(t) ? '#EFF6FF' : 'transparent', color: logForm.splitAmong.includes(t) ? 'var(--primary)' : 'var(--text-muted)', fontWeight:'600', fontSize:'0.85rem', cursor:'pointer', fontFamily:'Inter, sans-serif'}}>
+                                                            {t}
+                                                        </button>
                                                     ))}
                                                 </div>
                                                 {logForm.splitAmong.length > 0 && logForm.amount && (
                                                     <div style={{marginTop:'0.5rem', fontSize:'0.8rem', color:'var(--text-muted)'}}>
-                                                        {currency} {(parseFloat(logForm.amount || 0) / logForm.splitAmong.length).toFixed(2)} each
+                                                        {currency} {(parseFloat(logForm.amount || 0) / logForm.splitAmong.length).toFixed(2)} each across {logForm.splitAmong.length} {logForm.splitAmong.length === 1 ? 'person' : 'people'}
                                                     </div>
                                                 )}
                                             </div>
                                             <div style={{display:'flex', gap:'0.75rem'}}>
-                                                <button type="submit" className="btn btn-primary" style={{flex:1}}>Save</button>
-                                                <button type="button" className="btn" style={{flex:1}} onClick={() => setShowLogForm(false)}>Cancel</button>
+                                                <button type="submit" className="btn btn-primary" style={{flex:1}}>Save Expense</button>
+                                                <button type="button" className="btn" style={{flex:1}} onClick={resetForm}>Cancel</button>
                                             </div>
                                         </div>
                                     </form>
@@ -1451,39 +1578,39 @@
                                                     <div style={{width:'32px', height:'32px', borderRadius:'50%', background: avatarColors[i % avatarColors.length], display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'0.8rem', fontWeight:'700', flexShrink:0}}>{t[0].toUpperCase()}</div>
                                                     <span style={{flex:1, fontWeight:'600', fontSize:'0.92rem'}}>{t}</span>
                                                     <span style={{fontWeight:'700', fontSize:'0.95rem', color: bal > 0.01 ? 'var(--success)' : bal < -0.01 ? 'var(--danger)' : 'var(--text-muted)'}}>
-                                                        {bal > 0.01 ? `+${currency} ${bal.toFixed(2)}` : bal < -0.01 ? `-${currency} ${Math.abs(bal).toFixed(2)}` : 'Settled'}
+                                                        {bal > 0.01 ? `gets back ${currency} ${bal.toFixed(2)}` : bal < -0.01 ? `owes ${currency} ${Math.abs(bal).toFixed(2)}` : 'all settled'}
                                                     </span>
                                                 </div>
                                             );
                                         })}
                                     </div>
 
-                                    {/* Settlements */}
                                     {settlements.length > 0 && (
                                         <>
                                             <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>How to settle up</div>
                                             <div style={{display:'grid', gap:'0.5rem', marginBottom:'1.25rem'}}>
                                                 {settlements.map((s, i) => (
-                                                    <div key={i} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'#F0FDF4', border:'1.5px solid #BBF7D0', borderRadius:'var(--radius-sm)', padding:'0.8rem 1rem'}}>
-                                                        <span style={{fontWeight:'700', fontSize:'0.9rem', color:'#166534'}}>{s.from}</span>
-                                                        <span style={{color:'var(--text-muted)', fontSize:'0.85rem', flex:1}}>→ pays</span>
-                                                        <span style={{fontWeight:'700', fontSize:'0.9rem', color:'#166534'}}>{s.to}</span>
-                                                        <span style={{fontWeight:'800', fontSize:'0.95rem', color:'var(--success)', marginLeft:'auto'}}>{currency} {s.amount.toFixed(2)}</span>
+                                                    <div key={i} style={{display:'flex', alignItems:'center', gap:'0.5rem', background:'#F0FDF4', border:'1.5px solid #BBF7D0', borderRadius:'var(--radius-sm)', padding:'0.8rem 1rem', flexWrap:'wrap'}}>
+                                                        <span style={{fontWeight:'700', color:'#166534'}}>{s.from}</span>
+                                                        <span style={{color:'var(--text-muted)', fontSize:'0.85rem'}}>sends</span>
+                                                        <span style={{fontWeight:'800', color:'var(--success)'}}>{currency} {s.amount.toFixed(2)}</span>
+                                                        <span style={{color:'var(--text-muted)', fontSize:'0.85rem'}}>to</span>
+                                                        <span style={{fontWeight:'700', color:'#166534'}}>{s.to}</span>
                                                     </div>
                                                 ))}
                                             </div>
                                         </>
                                     )}
 
-                                    {/* Expense log */}
                                     <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>Expense Log</div>
                                     <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
                                         {logs.map(log => (
                                             <div key={log.id} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.8rem 1rem'}}>
+                                                <div style={{width:'8px', height:'8px', borderRadius:'50%', background: catColors[log.category] || '#6B7280', flexShrink:0}}></div>
                                                 <div style={{flex:1, minWidth:0}}>
                                                     <div style={{fontWeight:'600', fontSize:'0.92rem'}}>{log.description}</div>
                                                     <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.15rem'}}>
-                                                        Paid by <strong>{log.paidBy}</strong> · Split {log.splitAmong.length} ways · {log.date}
+                                                        {log.category} · Paid by <strong>{log.paidBy}</strong> · {log.splitAmong.length} people · {log.date}
                                                     </div>
                                                 </div>
                                                 <div style={{fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{currency} {log.amount.toFixed(2)}</div>
@@ -1494,11 +1621,11 @@
                                 </>
                             )}
 
-                            {logs.length === 0 && !showLogForm && (
-                                <div style={{textAlign:'center', padding:'2.5rem 1rem', color:'var(--text-muted)'}}>
+                            {logs.length === 0 && entryMode === null && (
+                                <div style={{textAlign:'center', padding:'2rem 1rem', color:'var(--text-muted)'}}>
                                     <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>🤝</div>
                                     <p style={{fontWeight:'500'}}>No shared expenses yet.</p>
-                                    <p style={{fontSize:'0.875rem', marginTop:'0.4rem'}}>Log your first shared cost above.</p>
+                                    <p style={{fontSize:'0.875rem', marginTop:'0.4rem'}}>Upload a receipt or enter an expense above.</p>
                                 </div>
                             )}
                         </>
