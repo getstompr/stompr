@@ -1281,6 +1281,9 @@
             const [receiptPreview, setReceiptPreview] = React.useState(null);
             const [analyzing, setAnalyzing] = React.useState(false);
             const [analysisNote, setAnalysisNote] = React.useState('');
+            const [paymentHandles, setPaymentHandles] = React.useState({});
+            const [showHandles, setShowHandles] = React.useState(false);
+            const [copied, setCopied] = React.useState('');
             const currencies = ['USD','EUR','GBP','JPY','AUD','CAD','CHF','CNY','INR','MXN','BRL','SGD','HKD','THB','TRY'];
             const expCategories = ['Food', 'Transport', 'Accommodation', 'Activities', 'Shopping', 'Health', 'Other'];
             const catColors = { Food:'#F59E0B', Transport:'#0EA5E9', Accommodation:'#8B5CF6', Activities:'#22C55E', Shopping:'#EC4899', Health:'#EF4444', Other:'#6B7280' };
@@ -1389,6 +1392,20 @@
                 reader.readAsDataURL(file);
             };
 
+            const setHandle = (name, field, value) => {
+                setPaymentHandles(prev => ({ ...prev, [name]: { ...(prev[name] || {}), [field]: value } }));
+            };
+
+            const copyToClipboard = (text, label) => {
+                navigator.clipboard.writeText(text).then(() => {
+                    setCopied(label);
+                    setTimeout(() => setCopied(''), 2000);
+                });
+            };
+
+            const venmoUrl = (handle, amount, note) =>
+                `https://venmo.com/u/${handle}?txn=pay&amount=${amount}&note=${encodeURIComponent(note)}`;
+
             const balances = React.useMemo(() => {
                 const b = {};
                 travelers.forEach(t => b[t] = 0);
@@ -1454,6 +1471,32 @@
                             <input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Add traveler name" style={{flex:1, padding:'0.5rem 0.75rem', border:'1.5px solid var(--border)', borderRadius:'var(--radius-sm)', fontFamily:'Inter, sans-serif', fontSize:'0.9rem'}} />
                             <button type="submit" className="btn btn-primary" style={{padding:'0.5rem 1rem'}}>Add</button>
                         </form>
+                        {travelers.length > 0 && (
+                            <div style={{marginTop:'0.75rem'}}>
+                                <button onClick={() => setShowHandles(v => !v)} style={{background:'none', border:'none', fontSize:'0.8rem', color:'var(--text-muted)', cursor:'pointer', fontFamily:'Inter, sans-serif', textDecoration:'underline', padding:0}}>
+                                    {showHandles ? 'Hide' : '💳 Set Venmo & Zelle handles'}
+                                </button>
+                                {showHandles && (
+                                    <div style={{marginTop:'0.75rem', display:'grid', gap:'0.75rem'}}>
+                                        {travelers.map(t => (
+                                            <div key={t} style={{display:'grid', gap:'0.4rem'}}>
+                                                <div style={{fontSize:'0.8rem', fontWeight:'700', color:'var(--text)'}}>{t}</div>
+                                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.5rem'}}>
+                                                    <div style={{position:'relative'}}>
+                                                        <span style={{position:'absolute', left:'0.6rem', top:'50%', transform:'translateY(-50%)', fontSize:'0.75rem', fontWeight:'800', color:'#3D95CE', pointerEvents:'none'}}>V</span>
+                                                        <input type="text" value={(paymentHandles[t] || {}).venmo || ''} onChange={e => setHandle(t, 'venmo', e.target.value)} placeholder="Venmo @username" style={{width:'100%', padding:'0.45rem 0.6rem 0.45rem 1.4rem', border:'1.5px solid #BAD8F5', borderRadius:'var(--radius-sm)', fontFamily:'Inter, sans-serif', fontSize:'0.82rem', background:'#F0F8FF'}} />
+                                                    </div>
+                                                    <div style={{position:'relative'}}>
+                                                        <span style={{position:'absolute', left:'0.6rem', top:'50%', transform:'translateY(-50%)', fontSize:'0.75rem', fontWeight:'800', color:'#6D1ED4', pointerEvents:'none'}}>Z</span>
+                                                        <input type="text" value={(paymentHandles[t] || {}).zelle || ''} onChange={e => setHandle(t, 'zelle', e.target.value)} placeholder="Zelle phone/email" style={{width:'100%', padding:'0.45rem 0.6rem 0.45rem 1.4rem', border:'1.5px solid #D8B4FE', borderRadius:'var(--radius-sm)', fontFamily:'Inter, sans-serif', fontSize:'0.82rem', background:'#FAF5FF'}} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {travelers.length >= 2 && (
@@ -1588,16 +1631,61 @@
                                     {settlements.length > 0 && (
                                         <>
                                             <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>How to settle up</div>
-                                            <div style={{display:'grid', gap:'0.5rem', marginBottom:'1.25rem'}}>
-                                                {settlements.map((s, i) => (
-                                                    <div key={i} style={{display:'flex', alignItems:'center', gap:'0.5rem', background:'#F0FDF4', border:'1.5px solid #BBF7D0', borderRadius:'var(--radius-sm)', padding:'0.8rem 1rem', flexWrap:'wrap'}}>
-                                                        <span style={{fontWeight:'700', color:'#166534'}}>{s.from}</span>
-                                                        <span style={{color:'var(--text-muted)', fontSize:'0.85rem'}}>sends</span>
-                                                        <span style={{fontWeight:'800', color:'var(--success)'}}>{currency} {s.amount.toFixed(2)}</span>
-                                                        <span style={{color:'var(--text-muted)', fontSize:'0.85rem'}}>to</span>
-                                                        <span style={{fontWeight:'700', color:'#166534'}}>{s.to}</span>
-                                                    </div>
-                                                ))}
+                                            {copied && <div style={{fontSize:'0.8rem', color:'var(--success)', fontWeight:'600', marginBottom:'0.5rem'}}>✓ Copied {copied} to clipboard</div>}
+                                            <div style={{display:'grid', gap:'0.75rem', marginBottom:'1.25rem'}}>
+                                                {settlements.map((s, i) => {
+                                                    const toHandles = paymentHandles[s.to] || {};
+                                                    const note = `Stompr – trip expense`;
+                                                    return (
+                                                        <div key={i} style={{background:'#F0FDF4', border:'1.5px solid #BBF7D0', borderRadius:'var(--radius)', padding:'0.9rem 1rem'}}>
+                                                            <div style={{display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap', marginBottom: (toHandles.venmo || toHandles.zelle) ? '0.75rem' : 0}}>
+                                                                <span style={{fontWeight:'700', color:'#166534'}}>{s.from}</span>
+                                                                <span style={{color:'var(--text-muted)', fontSize:'0.85rem'}}>sends</span>
+                                                                <span style={{fontWeight:'800', color:'var(--success)', fontSize:'1.05rem'}}>{currency} {s.amount.toFixed(2)}</span>
+                                                                <span style={{color:'var(--text-muted)', fontSize:'0.85rem'}}>to</span>
+                                                                <span style={{fontWeight:'700', color:'#166534'}}>{s.to}</span>
+                                                            </div>
+                                                            {(toHandles.venmo || toHandles.zelle) && (
+                                                                <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap'}}>
+                                                                    {toHandles.venmo && (
+                                                                        <a
+                                                                            href={venmoUrl(toHandles.venmo.replace('@',''), s.amount.toFixed(2), note)}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            style={{
+                                                                                display:'inline-flex', alignItems:'center', gap:'0.4rem',
+                                                                                background:'#3D95CE', color:'white',
+                                                                                borderRadius:'8px', padding:'0.4rem 0.85rem',
+                                                                                textDecoration:'none', fontSize:'0.82rem', fontWeight:'700',
+                                                                                boxShadow:'0 2px 6px rgba(61,149,206,0.35)'
+                                                                            }}
+                                                                        >
+                                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M20.5 2c-1.8.1-3.4 1-4.4 2.4C14.8 2.9 13.6 2 12 2c-3.9 0-7 4.4-7 9.8 0 5.1 2.8 10.2 6.1 10.2 1.6 0 3-1.4 4.4-4.2.8 2.8 2.1 4.2 3.7 4.2 3 0 4.8-4.5 4.8-9.4C24 7.2 22.8 2 20.5 2z"/></svg>
+                                                                            Pay on Venmo
+                                                                        </a>
+                                                                    )}
+                                                                    {toHandles.zelle && (
+                                                                        <button
+                                                                            onClick={() => copyToClipboard(toHandles.zelle, `${s.to}'s Zelle`)}
+                                                                            style={{
+                                                                                display:'inline-flex', alignItems:'center', gap:'0.4rem',
+                                                                                background:'linear-gradient(135deg,#6D1ED4,#9B51E0)',
+                                                                                color:'white', border:'none',
+                                                                                borderRadius:'8px', padding:'0.4rem 0.85rem',
+                                                                                fontSize:'0.82rem', fontWeight:'700', cursor:'pointer',
+                                                                                fontFamily:'Inter, sans-serif',
+                                                                                boxShadow:'0 2px 6px rgba(109,30,212,0.35)'
+                                                                            }}
+                                                                        >
+                                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M3 3h18v3.5L11 13.5H21V17H3v-3.5l10-7H3V3z"/></svg>
+                                                                            Send via Zelle
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </>
                                     )}
