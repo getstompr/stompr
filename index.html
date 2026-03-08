@@ -2341,8 +2341,7 @@
             const [loading, setLoading] = useState(false);
             const [showSettings, setShowSettings] = useState(false);
             const bottomRef = useRef(null);
-            const [apiKey, setApiKey] = useState(() => localStorage.getItem('stompr_ak') || '');
-            const saveApiKey = (k) => { setApiKey(k); localStorage.setItem('stompr_ak', k); };
+            const [credits, setCredits] = useState(profile?.credits ?? null);
 
             const visitedPlaces = (places || []).filter(p => p.visited).map(p => p.name);
             const bucketList    = (places || []).filter(p => !p.visited).map(p => p.name);
@@ -2391,23 +2390,27 @@ RULES:
             const sendMessage = async (e) => {
                 e.preventDefault();
                 if (!input.trim() || loading) return;
-                if (!apiKey) { setShowSettings(true); return; }
                 const userMsg = { role:'user', content: input.trim() };
                 const newMsgs = [...messages, userMsg];
                 saveMessages(newMsgs);
                 setInput('');
                 setLoading(true);
                 try {
-                    const res = await fetch('https://api.anthropic.com/v1/messages', {
+                    const res = await fetch('https://iqczpwzllkahswgzwzhc.supabase.co/functions/v1/ai-chat', {
                         method: 'POST',
-                        headers: { 'x-api-key': apiKey, 'anthropic-version':'2023-06-01', 'content-type':'application/json', 'anthropic-dangerous-direct-browser-access':'true' },
-                        body: JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:1024, system: buildSystemPrompt(agentProfile), messages: newMsgs.slice(-20) })
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+                        body: JSON.stringify({ message: input.trim(), history: messages.slice(-20), systemPrompt: agentProfile ? buildSystemPrompt(agentProfile) : undefined })
                     });
                     const data = await res.json();
-                    const reply = { role:'assistant', content: data.content?.[0]?.text || 'Sorry, I had trouble responding. Please try again.' };
-                    saveMessages([...newMsgs, reply]);
+                    if (data.error === 'no_credits') {
+                        saveMessages([...newMsgs, { role:'assistant', content:'⚠️ You\'ve used all your credits. Purchase more to keep chatting!' }]);
+                    } else {
+                        const reply = { role:'assistant', content: data.message || 'Sorry, I had trouble responding. Please try again.' };
+                        saveMessages([...newMsgs, reply]);
+                        setCredits(data.credits_remaining);
+                    }
                 } catch {
-                    saveMessages([...newMsgs, { role:'assistant', content:'Connection error — please check your API key and try again.' }]);
+                    saveMessages([...newMsgs, { role:'assistant', content:'Connection error — please try again.' }]);
                 }
                 setLoading(false);
             };
@@ -2562,16 +2565,11 @@ RULES:
                                     </div>
                                 ))}
                             </div>
-                            <div style={{marginTop:'1rem', borderTop:'1px solid var(--border)', paddingTop:'1rem'}}>
-                                <div style={{fontSize:'0.72rem', fontWeight:'700', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.4rem'}}>Anthropic API Key</div>
-                                <input
-                                    type="password"
-                                    value={apiKey}
-                                    onChange={e => saveApiKey(e.target.value)}
-                                    placeholder="sk-ant-..."
-                                    style={{width:'100%', padding:'0.5rem 0.75rem', border:'1.5px solid var(--border)', borderRadius:'8px', fontFamily:'Inter, sans-serif', fontSize:'0.83rem', background:'var(--bg)', color:'var(--text)', boxSizing:'border-box'}}
-                                />
-                                <p style={{fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'0.35rem'}}>Required to chat. Stored locally on your device only.</p>
+                            <div style={{marginTop:'1rem', borderTop:'1px solid var(--border)', paddingTop:'1rem', display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                                <div>
+                                    <div style={{fontSize:'0.72rem', fontWeight:'700', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.2rem'}}>Credits Remaining</div>
+                                    <div style={{fontSize:'1.1rem', fontWeight:'700', color:'var(--primary)'}}>{credits === null ? '...' : credits}</div>
+                                </div>
                             </div>
                             <button onClick={() => { if (window.confirm('Clear all conversation history?')) { saveMessages([]); setShowSettings(false); }}} style={{marginTop:'0.75rem', width:'100%', background:'none', border:'1.5px solid #fca5a5', borderRadius:'8px', padding:'0.5rem', color:'#ef4444', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.79rem', cursor:'pointer'}}>
                                 Clear conversation history
@@ -2615,9 +2613,9 @@ RULES:
                             Send
                         </button>
                     </form>
-                    {!apiKey && (
+                    {credits === 0 && (
                         <p style={{fontSize:'0.74rem', color:'#f59e0b', marginTop:'0.5rem', textAlign:'center'}}>
-                            ⚠️ Add your Anthropic API key in <button onClick={() => setShowSettings(true)} style={{background:'none', border:'none', color:'#f59e0b', fontWeight:'700', cursor:'pointer', fontFamily:'Inter, sans-serif', fontSize:'0.74rem', textDecoration:'underline', padding:0}}>Settings</button> to start chatting.
+                            ⚠️ You've used all your credits. Contact us to purchase more.
                         </p>
                     )}
                 </div>
