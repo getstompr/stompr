@@ -2089,16 +2089,39 @@
             const PIC_KEY = 'stompr_avatar_' + session.user.id;
 
             const handlePicUpload = (e) => {
-                const file = e.target.files?.[0];
+                const file = e.target.files && e.target.files[0];
                 if (!file) return;
-                if (file.size > 2 * 1024 * 1024) { setMessage('Image must be under 2 MB'); return; }
+                if (!file.type.startsWith('image/')) { setMessage('Please select an image file.'); return; }
+                if (file.size > 5 * 1024 * 1024) { setMessage('Image must be under 5 MB'); return; }
+                setMessage('Processing…');
                 const reader = new FileReader();
-                reader.onload = () => {
+                reader.onload = function() {
                     const dataUrl = reader.result;
-                    localStorage.setItem(PIC_KEY, dataUrl);
-                    onProfilePicChange(dataUrl);
-                    setMessage('Profile picture updated!');
+                    // Resize via canvas to keep localStorage small
+                    const img = new Image();
+                    img.onload = function() {
+                        try {
+                            const MAX = 256;
+                            let w = img.width, h = img.height;
+                            if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
+                            else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
+                            const canvas = document.createElement('canvas');
+                            canvas.width = w; canvas.height = h;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, w, h);
+                            const resized = canvas.toDataURL('image/jpeg', 0.8);
+                            localStorage.setItem(PIC_KEY, resized);
+                            onProfilePicChange(resized);
+                            setMessage('Profile picture updated!');
+                        } catch (err) {
+                            console.error('Avatar save error:', err);
+                            setMessage('Error saving picture. Try a smaller image.');
+                        }
+                    };
+                    img.onerror = function() { setMessage('Could not process that image. Try another.'); };
+                    img.src = dataUrl;
                 };
+                reader.onerror = function() { setMessage('Could not read that file. Try another.'); };
                 reader.readAsDataURL(file);
             };
 
@@ -2159,7 +2182,7 @@
                                     </button>
                                 )}
                             </div>
-                            <input ref={fileRef} type="file" accept="image/*" onChange={handlePicUpload} style={{display:'none'}} />
+                            <input ref={fileRef} type="file" accept="image/*" onChange={(e) => { handlePicUpload(e); e.target.value = null; }} style={{display:'none'}} />
                             <p style={{fontSize:'0.73rem', color:'var(--text-muted)', marginTop:'0.35rem'}}>JPG, PNG or GIF. Max 2 MB.</p>
                         </div>
                     </div>
