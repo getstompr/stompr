@@ -1686,22 +1686,6 @@
 
             return (
                 <div>
-                    {/* API key settings */}
-                    <div style={{marginBottom:'1.25rem', display:'flex', justifyContent:'flex-end'}}>
-                        <button onClick={() => setShowApiKey(v => !v)} style={{background:'none', border:'none', fontSize:'0.8rem', color:'var(--text-muted)', cursor:'pointer', fontFamily:'Inter, sans-serif', textDecoration:'underline'}}>
-                            {showApiKey ? 'Hide' : '⚙️ Receipt scanning key'}
-                        </button>
-                    </div>
-                    {showApiKey && (
-                        <div className="category-block" style={{marginBottom:'1.25rem', background:'#F8FAFF', borderColor:'#BAE6FD'}}>
-                            <div style={{fontWeight:'700', fontSize:'0.85rem', color:'var(--primary)', marginBottom:'0.4rem'}}>Anthropic API Key</div>
-                            <p style={{fontSize:'0.8rem', color:'var(--text-muted)', marginBottom:'0.75rem'}}>Used only for receipt scanning. Stored locally on your device — never sent to our servers.</p>
-                            <div style={{display:'flex', gap:'0.5rem'}}>
-                                <input type="password" value={apiKey} onChange={e => saveApiKey(e.target.value)} placeholder="sk-ant-..." style={{flex:1, padding:'0.5rem 0.75rem', border:'1.5px solid var(--border)', borderRadius:'var(--radius-sm)', fontFamily:'Inter, sans-serif', fontSize:'0.85rem'}} />
-                                <button className="btn" onClick={() => setShowApiKey(false)} style={{padding:'0.5rem 0.75rem', fontSize:'0.85rem'}}>Done</button>
-                            </div>
-                        </div>
-                    )}
 
                     {/* Travelers */}
                     <div className="category-block" style={{marginBottom:'1.25rem'}}>
@@ -1767,41 +1751,17 @@
                                     {currencies.map(c => <option key={c}>{c}</option>)}
                                 </select>
                                 {entryMode === null && (
-                                    <div style={{display:'flex', gap:'0.5rem', flex:1}}>
-                                        <label style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'0.3rem', border:'1.5px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.65rem', cursor:'pointer', background:'var(--surface)', transition:'all 0.2s'}}>
-                                            <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handleReceiptUpload} />
-                                            <span style={{fontSize:'1.3rem'}}>📷</span>
-                                            <span style={{fontSize:'0.78rem', fontWeight:'700', color:'var(--text)'}}>Upload Receipt</span>
-                                        </label>
-                                        <button onClick={() => { setLogForm(f => ({...f, splitAmong: [...travelers]})); setEntryMode('manual'); }} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'0.3rem', border:'1.5px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.65rem', cursor:'pointer', background:'var(--surface)', fontFamily:'Inter, sans-serif', transition:'all 0.2s'}}>
-                                            <span style={{fontSize:'1.3rem'}}>✏️</span>
-                                            <span style={{fontSize:'0.78rem', fontWeight:'700', color:'var(--text)'}}>Enter Manually</span>
-                                        </button>
-                                    </div>
+                                    <button onClick={() => { setLogForm(f => ({...f, splitAmong: [...travelers]})); setEntryMode('manual'); }} style={{flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem', border:'1.5px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.65rem 1rem', cursor:'pointer', background:'var(--surface)', fontFamily:'Inter, sans-serif', transition:'all 0.2s'}}>
+                                        <span style={{fontSize:'1.1rem'}}>✏️</span>
+                                        <span style={{fontSize:'0.85rem', fontWeight:'700', color:'var(--text)'}}>Add Expense</span>
+                                    </button>
                                 )}
                             </div>
 
-                            {/* Receipt upload state */}
-                            {entryMode === 'receipt' && analyzing && (
-                                <div className="category-block" style={{marginBottom:'1.25rem', textAlign:'center', padding:'2rem'}}>
-                                    <div style={{fontSize:'2rem', marginBottom:'0.5rem'}}>🔍</div>
-                                    <p style={{fontWeight:'600', color:'var(--primary)'}}>Scanning receipt…</p>
-                                    <p style={{fontSize:'0.82rem', color:'var(--text-muted)', marginTop:'0.25rem'}}>Identifying merchant, total, and category</p>
-                                </div>
-                            )}
-
-                            {/* Entry form (manual or post-receipt) */}
+                            {/* Entry form */}
                             {entryMode === 'manual' && (
                                 <div className="category-block" style={{marginBottom:'1.25rem'}}>
-                                    {receiptPreview && (
-                                        <div style={{marginBottom:'1rem'}}>
-                                            <img src={receiptPreview} alt="Receipt" style={{maxHeight:'160px', borderRadius:'var(--radius-sm)', objectFit:'contain', border:'1px solid var(--border)'}} />
-                                            {analysisNote && <div style={{marginTop:'0.4rem', fontSize:'0.8rem', color: analysisNote.includes('scanned') ? 'var(--success)' : 'var(--text-muted)', fontWeight:'500'}}>{analysisNote.includes('scanned') ? '✓ ' : ''}{analysisNote}</div>}
-                                        </div>
-                                    )}
-                                    <div style={{fontWeight:'700', marginBottom:'1rem'}}>
-                                        {receiptPreview ? 'Review & Confirm' : 'New Shared Expense'}
-                                    </div>
+                                    <div style={{fontWeight:'700', marginBottom:'1rem'}}>New Shared Expense</div>
                                     <form onSubmit={handleLogSubmit}>
                                         <div style={{display:'grid', gap:'0.75rem'}}>
                                             <div className="form-group" style={{margin:0}}>
@@ -1961,7 +1921,7 @@
                                 <div style={{textAlign:'center', padding:'2rem 1rem', color:'var(--text-muted)'}}>
                                     <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>🤝</div>
                                     <p style={{fontWeight:'500'}}>No shared expenses yet.</p>
-                                    <p style={{fontSize:'0.875rem', marginTop:'0.4rem'}}>Upload a receipt or enter an expense above.</p>
+                                    <p style={{fontSize:'0.875rem', marginTop:'0.4rem'}}>Tap "Add Expense" above to log your first expense.</p>
                                 </div>
                             )}
                         </>
