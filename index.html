@@ -1055,6 +1055,12 @@
 
                             <div className="tabs">
                                 <button
+                                    className={`tab ${activeTab === 'ai' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('ai')}
+                                >
+                                    AI Travel Assistant
+                                </button>
+                                <button
                                     className={`tab ${activeTab === 'packing' ? 'active' : ''}`}
                                     onClick={() => setActiveTab('packing')}
                                 >
@@ -1065,12 +1071,6 @@
                                     onClick={() => setActiveTab('places')}
                                 >
                                     Bucket List & Visited
-                                </button>
-                                <button
-                                    className={`tab ${activeTab === 'ai' ? 'active' : ''}`}
-                                    onClick={() => setActiveTab('ai')}
-                                >
-                                    AI Travel Assistant
                                 </button>
                                 <button
                                     className={`tab ${activeTab === 'profile' ? 'active' : ''}`}
