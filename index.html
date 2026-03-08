@@ -2221,7 +2221,7 @@
             );
         }
 
-        const ALL_COUNTRIES = ['Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria', 'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belgium', 'Belize', 'Benin', 'Bhutan', 'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi', 'Cabo Verde', 'Cambodia', 'Cameroon', 'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia', 'Comoros', 'Congo (Republic)', 'Costa Rica', 'Croatia', 'Cuba', 'Czech Republic', 'Democratic Republic of Congo', 'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic', 'Ecuador', 'Egypt', 'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Eswatini', 'Ethiopia', 'Fiji', 'Finland', 'France', 'Gabon', 'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Guatemala', 'Guinea', 'Guinea-Bissau', 'Guyana', 'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran', 'Iraq', 'Ireland', 'Israel', 'Italy', 'Ivory Coast', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya', 'Kiribati', 'Kuwait', 'Kyrgyzstan', 'Laos', 'Lebanon', 'Lesotho', 'Liberia', 'Libya', 'Liechtenstein', 'Luxembourg', 'Madagascar', 'Malawi', 'Malaysia', 'Maldives', 'Mali', 'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico', 'Micronesia', 'Moldova', 'Monaco', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nauru', 'Nepal', 'Netherlands', 'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman', 'Pakistan', 'Palau', 'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland', 'Portugal', 'Qatar', 'Romania', 'Russia', 'Rwanda', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Samoa', 'San Marino', 'Sao Tome and Principe', 'Saudi Arabia', 'Senegal', 'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'Solomon Islands', 'Somalia', 'South Africa', 'South Korea', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden', 'Switzerland', 'Syria', 'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand', 'Timor-Leste', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia', 'Turkey', 'Turkmenistan', 'Tuvalu', 'UAE', 'Uganda', 'Ukraine', 'United Kingdom', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City', 'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe'];
+        const ALL_COUNTRIES = ['Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria', 'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belgium', 'Belize', 'Benin', 'Bhutan', 'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi', 'Cabo Verde', 'Cambodia', 'Cameroon', 'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia', 'Comoros', 'Congo (Republic)', 'Costa Rica', 'Croatia', 'Cuba', 'Czech Republic', 'Democratic Republic of Congo', 'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic', 'Ecuador', 'Egypt', 'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Eswatini', 'Ethiopia', 'Fiji', 'Finland', 'France', 'Gabon', 'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Guatemala', 'Guinea', 'Guinea-Bissau', 'Guyana', 'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran', 'Iraq', 'Ireland', 'Israel', 'Italy', 'Ivory Coast', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya', 'Kiribati', 'Kuwait', 'Kyrgyzstan', 'Laos', 'Lebanon', 'Lesotho', 'Liberia', 'Libya', 'Liechtenstein', 'Luxembourg', 'Madagascar', 'Malawi', 'Malaysia', 'Maldives', 'Mali', 'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico', 'Micronesia', 'Moldova', 'Monaco', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nauru', 'Nepal', 'Netherlands', 'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman', 'Pakistan', 'Palau', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland', 'Portugal', 'Qatar', 'Romania', 'Russia', 'Rwanda', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Samoa', 'San Marino', 'Sao Tome and Principe', 'Saudi Arabia', 'Senegal', 'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'Solomon Islands', 'Somalia', 'South Africa', 'South Korea', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden', 'Switzerland', 'Syria', 'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand', 'Timor-Leste', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia', 'Turkey', 'Turkmenistan', 'Tuvalu', 'UAE', 'Uganda', 'Ukraine', 'United Kingdom', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City', 'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe'];
 
         const COUNTRY_SPECIFICS = {
 'France': { stateSlug: 'france', cdcSlug: 'france', climate: 'temperate', extraItems: ['Type C/E power adapter', 'Euros cash (many small vendors cash-only)', 'Navigo/Carnet metro pass for Paris', 'Light scarf (churches/cathedrals)', 'Comfortable walking shoes', 'Reusable shopping bag (plastic bags banned)', 'Museum pass for Paris'], vaccinations: ['Routine vaccines', 'Hepatitis A (consider)', 'Hepatitis B (consider)', 'Tick-borne Encephalitis (if hiking)'], healthNotes: 'Excellent healthcare; EU EHIC valid for EU residents, comprehensive travel insurance essential for others.', culturalNotes: 'Greet shopkeepers with "Bonjour" on entry; cover shoulders in churches and cathedrals.' },
@@ -2482,6 +2482,12 @@
             return (
                 <div>
                     <div className="packing-subtabs">
+                        <button
+                            className={`packing-subtab ${activeEnv === 'country' ? 'active' : ''}`}
+                            onClick={() => setActiveEnv('country')}
+                        >
+                            🌍 By Country
+                        </button>
                         {Object.entries(PACKING_DATA).map(([key, val]) => (
                             <button
                                 key={key}
@@ -2491,12 +2497,6 @@
                                 {val.emoji} {val.label}
                             </button>
                         ))}
-                        <button
-                            className={`packing-subtab ${activeEnv === 'country' ? 'active' : ''}`}
-                            onClick={() => setActiveEnv('country')}
-                        >
-                            🌍 By Country
-                        </button>
                     </div>
 
                     {activeEnv === 'country' ? (
@@ -2544,7 +2544,6 @@
 
         function CountryPackingView({ checked, setChecked, resetList }) {
             const [selectedCountry, setSelectedCountry] = React.useState('');
-            const [countryTab, setCountryTab] = React.useState('packing');
 
             const toggleItem = (key) => {
                 setChecked(prev => ({ ...prev, [key]: !prev[key] }));
@@ -2553,7 +2552,6 @@
             const handleCountryChange = (country) => {
                 resetList('country');
                 setSelectedCountry(country);
-                setCountryTab('packing');
             };
 
             const getStateDeptUrl = (country) => {
@@ -2594,125 +2592,92 @@
 
                     {selectedCountry && (
                         <div>
-                            <div className="country-subtabs">
-                                <button
-                                    className={`country-subtab-btn ${countryTab === 'packing' ? 'active' : ''}`}
-                                    onClick={() => setCountryTab('packing')}
-                                >
-                                    🧳 Packing List
-                                </button>
-                                <button
-                                    className={`country-subtab-btn ${countryTab === 'gov' ? 'active' : ''}`}
-                                    onClick={() => setCountryTab('gov')}
-                                >
-                                    🏛️ Government Recommendations
-                                </button>
+                            {/* ── GOVERNMENT RECOMMENDATIONS ── */}
+                            <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>🏛️ Government Recommendations</div>
+
+                            {COUNTRY_SPECIFICS[selectedCountry] && COUNTRY_SPECIFICS[selectedCountry].culturalNotes && (
+                                <div style={{background:'#FFF8E7', border:'1.5px solid #FDE68A', borderRadius:'var(--radius)', padding:'1rem 1.25rem', marginBottom:'1rem'}}>
+                                    <div style={{fontWeight:'700', marginBottom:'0.4rem', color:'#92400E', fontSize:'0.82rem', textTransform:'uppercase', letterSpacing:'0.06em'}}>
+                                        ✈️ Cultural & Entry Notes
+                                    </div>
+                                    <p style={{color:'#78350F', fontSize:'0.9rem', lineHeight:'1.6'}}>
+                                        {COUNTRY_SPECIFICS[selectedCountry].culturalNotes}
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="gov-card">
+                                <div className="gov-card-icon">🇺🇸</div>
+                                <div className="gov-card-body">
+                                    <div className="gov-card-title">US State Department</div>
+                                    <div className="gov-card-desc">Official travel advisory, safety level, entry requirements, and US Embassy contact information for {selectedCountry}.</div>
+                                    <a href={getStateDeptUrl(selectedCountry)} target="_blank" rel="noopener noreferrer" className="gov-link-btn">View Travel Advisory →</a>
+                                </div>
                             </div>
 
-                            {countryTab === 'packing' && (
-                                <div>
-                                    <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.25rem', gap:'1rem'}}>
-                                        <div style={{flex:1}}>
-                                            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'0.35rem'}}>
-                                                <span style={{fontSize:'0.8rem', color:'var(--text-muted)', fontWeight:'600'}}>{checkedCount} of {allItems.length} packed</span>
-                                                <span style={{fontSize:'0.8rem', color:'var(--primary)', fontWeight:'700'}}>{progress}%</span>
-                                            </div>
-                                            <div style={{height:'6px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
-                                                <div style={{height:'100%', width:`${progress}%`, background:'linear-gradient(90deg, var(--primary), var(--success))', borderRadius:'999px', transition:'width 0.4s ease'}}></div>
-                                            </div>
-                                        </div>
-                                        <button className="reset-btn" onClick={() => resetList('country')}>Reset</button>
-                                    </div>
-
-                                    {categories.map((category, catIdx) => {
-                                        const blockClass = `category-block${category.medical ? ' medical-block' : ''}`;
-                                        const headerClass = `category-header${category.medical ? ' medical' : ''}`;
-                                        return (
-                                            <div key={catIdx} className={blockClass}>
-                                                <div className={headerClass}>{category.medical ? '🩺 ' : ''}{category.name}</div>
-                                                {category.items.map((item) => {
-                                                    const key = `country-${gIdx}`;
-                                                    const isChecked = !!checked[key];
-                                                    gIdx++;
-                                                    return (
-                                                        <div key={key} className="checklist-item" onClick={() => toggleItem(key)}>
-                                                            <div className={`circle-check ${isChecked ? 'checked' : ''}`}></div>
-                                                            <span className={`checklist-item-label ${isChecked ? 'checked' : ''}`}>{item}</span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        );
-                                    })}
+                            <div className="gov-card">
+                                <div className="gov-card-icon">🏥</div>
+                                <div className="gov-card-body">
+                                    <div className="gov-card-title">CDC Travel Health</div>
+                                    <div className="gov-card-desc">Recommended vaccinations, disease risks, health precautions, and outbreak alerts for {selectedCountry}.</div>
+                                    <a href={getCdcUrl(selectedCountry)} target="_blank" rel="noopener noreferrer" className="gov-link-btn">View Health Recommendations →</a>
                                 </div>
-                            )}
+                            </div>
 
-                            {countryTab === 'gov' && (
-                                <div>
-                                    {COUNTRY_SPECIFICS[selectedCountry] && COUNTRY_SPECIFICS[selectedCountry].culturalNotes && (
-                                        <div style={{background:'#FFF8E7', border:'1.5px solid #FDE68A', borderRadius:'var(--radius)', padding:'1rem 1.25rem', marginBottom:'1rem'}}>
-                                            <div style={{fontWeight:'700', marginBottom:'0.4rem', color:'#92400E', fontSize:'0.82rem', textTransform:'uppercase', letterSpacing:'0.06em'}}>
-                                                ✈️ Cultural & Entry Notes
-                                            </div>
-                                            <p style={{color:'#78350F', fontSize:'0.9rem', lineHeight:'1.6'}}>
-                                                {COUNTRY_SPECIFICS[selectedCountry].culturalNotes}
-                                            </p>
-                                        </div>
-                                    )}
+                            <div className="gov-card">
+                                <div className="gov-card-icon">🌐</div>
+                                <div className="gov-card-body">
+                                    <div className="gov-card-title">WHO International Travel & Health</div>
+                                    <div className="gov-card-desc">Global disease outbreak alerts, vaccination requirements, and international health regulations from the World Health Organization.</div>
+                                    <a href="https://www.who.int/travel-advice" target="_blank" rel="noopener noreferrer" className="gov-link-btn">View WHO Travel Advice →</a>
+                                </div>
+                            </div>
 
-                                    <div className="gov-card">
-                                        <div className="gov-card-icon">🇺🇸</div>
-                                        <div className="gov-card-body">
-                                            <div className="gov-card-title">US State Department</div>
-                                            <div className="gov-card-desc">
-                                                Official travel advisory, safety level, entry requirements, and US Embassy contact information for {selectedCountry}.
-                                            </div>
-                                            <a href={getStateDeptUrl(selectedCountry)} target="_blank" rel="noopener noreferrer" className="gov-link-btn">
-                                                View Travel Advisory →
-                                            </a>
-                                        </div>
+                            <div className="gov-card" style={{background:'#F0F9FF', borderColor:'#BAE6FD', marginBottom:'2rem'}}>
+                                <div className="gov-card-icon">📋</div>
+                                <div className="gov-card-body">
+                                    <div className="gov-card-title" style={{color:'var(--primary)'}}>Smart Traveler Enrollment Program (STEP)</div>
+                                    <div className="gov-card-desc">Register with the US Embassy before you travel. Receive emergency alerts and get help in a crisis abroad.</div>
+                                    <a href="https://step.state.gov/" target="_blank" rel="noopener noreferrer" className="gov-link-btn" style={{background:'var(--primary)'}}>Enroll in STEP →</a>
+                                </div>
+                            </div>
+
+                            {/* ── PACKING LIST ── */}
+                            <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>🧳 Packing List</div>
+
+                            <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.25rem', gap:'1rem'}}>
+                                <div style={{flex:1}}>
+                                    <div style={{display:'flex', justifyContent:'space-between', marginBottom:'0.35rem'}}>
+                                        <span style={{fontSize:'0.8rem', color:'var(--text-muted)', fontWeight:'600'}}>{checkedCount} of {allItems.length} packed</span>
+                                        <span style={{fontSize:'0.8rem', color:'var(--primary)', fontWeight:'700'}}>{progress}%</span>
                                     </div>
-
-                                    <div className="gov-card">
-                                        <div className="gov-card-icon">🏥</div>
-                                        <div className="gov-card-body">
-                                            <div className="gov-card-title">CDC Travel Health</div>
-                                            <div className="gov-card-desc">
-                                                Recommended vaccinations, disease risks, health precautions, and outbreak alerts for {selectedCountry}.
-                                            </div>
-                                            <a href={getCdcUrl(selectedCountry)} target="_blank" rel="noopener noreferrer" className="gov-link-btn">
-                                                View Health Recommendations →
-                                            </a>
-                                        </div>
-                                    </div>
-
-                                    <div className="gov-card">
-                                        <div className="gov-card-icon">🌐</div>
-                                        <div className="gov-card-body">
-                                            <div className="gov-card-title">WHO International Travel & Health</div>
-                                            <div className="gov-card-desc">
-                                                Global disease outbreak alerts, vaccination requirements, and international health regulations from the World Health Organization.
-                                            </div>
-                                            <a href="https://www.who.int/travel-advice" target="_blank" rel="noopener noreferrer" className="gov-link-btn">
-                                                View WHO Travel Advice →
-                                            </a>
-                                        </div>
-                                    </div>
-
-                                    <div className="gov-card" style={{background:'#F0F9FF', borderColor:'#BAE6FD'}}>
-                                        <div className="gov-card-icon">📋</div>
-                                        <div className="gov-card-body">
-                                            <div className="gov-card-title" style={{color:'var(--primary)'}}>Smart Traveler Enrollment Program (STEP)</div>
-                                            <div className="gov-card-desc">
-                                                Register with the US Embassy before you travel. Receive emergency alerts and get help in a crisis abroad.
-                                            </div>
-                                            <a href="https://step.state.gov/" target="_blank" rel="noopener noreferrer" className="gov-link-btn" style={{background:'var(--primary)'}}>
-                                                Enroll in STEP →
-                                            </a>
-                                        </div>
+                                    <div style={{height:'6px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
+                                        <div style={{height:'100%', width:`${progress}%`, background:'linear-gradient(90deg, var(--primary), var(--success))', borderRadius:'999px', transition:'width 0.4s ease'}}></div>
                                     </div>
                                 </div>
-                            )}
+                                <button className="reset-btn" onClick={() => resetList('country')}>Reset</button>
+                            </div>
+
+                            {categories.map((category, catIdx) => {
+                                const blockClass = `category-block${category.medical ? ' medical-block' : ''}`;
+                                const headerClass = `category-header${category.medical ? ' medical' : ''}`;
+                                return (
+                                    <div key={catIdx} className={blockClass}>
+                                        <div className={headerClass}>{category.medical ? '🩺 ' : ''}{category.name}</div>
+                                        {category.items.map((item) => {
+                                            const key = `country-${gIdx}`;
+                                            const isChecked = !!checked[key];
+                                            gIdx++;
+                                            return (
+                                                <div key={key} className="checklist-item" onClick={() => toggleItem(key)}>
+                                                    <div className={`circle-check ${isChecked ? 'checked' : ''}`}></div>
+                                                    <span className={`checklist-item-label ${isChecked ? 'checked' : ''}`}>{item}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
 
