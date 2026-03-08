@@ -309,6 +309,14 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        .tab-content-enter {
+            animation: tabFadeIn 0.3s ease both;
+        }
+        @keyframes tabFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         @keyframes pulse {
             0%, 100% { opacity: 0.3; transform: scale(0.85); }
             50% { opacity: 1; transform: scale(1); }
@@ -1504,6 +1512,7 @@
                                 </button>
                             </div>
 
+                            <div key={activeTab} className="tab-content-enter">
                             {activeTab === 'packing' && (
                                 <PresetPackingView />
                             )}
@@ -1544,6 +1553,7 @@
                                     />
                                 </div>
                             )}
+                            </div>
                         </div>
                         <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 0.5rem'}}>With love from A&amp;E</footer>
                     </div>
@@ -2581,7 +2591,7 @@
 
             // ── If viewing another user's profile ──
             if (viewingProfile) {
-                return <CommunityUserProfile
+                return <div key={'profile-' + viewingProfile.id} className="tab-content-enter"><CommunityUserProfile
                     userId={viewingProfile.id}
                     userName={viewingProfile.name}
                     userHandle={viewingProfile.handle}
@@ -2598,7 +2608,7 @@
                     friendIds={friendIds}
                     onBack={() => setViewingProfile(null)}
                     onViewProfile={viewProfile}
-                />;
+                /></div>;
             }
 
             return (
@@ -2618,7 +2628,7 @@
 
                     {/* ── Friends tab ── */}
                     {communityTab === 'friends' && (
-                        <div>
+                        <div className="tab-content-enter">
                             {/* Search bar */}
                             <div style={{marginBottom:'1.5rem'}}>
                                 <div style={{position:'relative'}}>
@@ -2688,7 +2698,7 @@
                     )}
 
                     {/* ── Feed tab ── */}
-                    {communityTab === 'feed' && <div className="community-feed-layout" style={{display:'flex', gap:'1.5rem', alignItems:'flex-start'}}>
+                    {communityTab === 'feed' && <div className="community-feed-layout tab-content-enter" style={{display:'flex', gap:'1.5rem', alignItems:'flex-start'}}>
                     <div style={{flex:'1 1 0', minWidth:0}}>
                     {/* ── Compose ── */}
                     {!showCompose ? (
