@@ -1425,11 +1425,16 @@
         }
 
         function BudgetSubView() {
-            const [expenses, setExpenses] = React.useState([]);
-            const [showForm, setShowForm] = React.useState(false);
-            const [totalBudget, setTotalBudget] = React.useState('');
-            const [currency, setCurrency] = React.useState('USD');
+            const ls = (k, fb) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : fb; } catch { return fb; } };
+            const [expenses,     setExpenses]     = React.useState(() => ls('stompr_budget_expenses', []));
+            const [totalBudget,  setTotalBudget]  = React.useState(() => ls('stompr_budget_total', ''));
+            const [currency,     setCurrency]      = React.useState(() => ls('stompr_budget_currency', 'USD'));
+            const [showForm,     setShowForm]      = React.useState(false);
             const [form, setForm] = React.useState({ description: '', amount: '', category: 'Food', date: new Date().toISOString().split('T')[0] });
+
+            React.useEffect(() => { localStorage.setItem('stompr_budget_expenses', JSON.stringify(expenses)); }, [expenses]);
+            React.useEffect(() => { localStorage.setItem('stompr_budget_total',    JSON.stringify(totalBudget)); }, [totalBudget]);
+            React.useEffect(() => { localStorage.setItem('stompr_budget_currency', JSON.stringify(currency)); }, [currency]);
             const categories = ['Food', 'Transport', 'Accommodation', 'Activities', 'Shopping', 'Health', 'Other'];
             const catColors = { Food: '#F59E0B', Transport: '#0EA5E9', Accommodation: '#8B5CF6', Activities: '#22C55E', Shopping: '#EC4899', Health: '#EF4444', Other: '#6B7280' };
             const currencies = ['USD','EUR','GBP','JPY','AUD','CAD','CHF','CNY','INR','MXN','BRL','SGD','HKD','THB','TRY'];
@@ -1556,20 +1561,26 @@
         }
 
         function SharedExpensesSubView() {
-            const [travelers, setTravelers] = React.useState([]);
-            const [logs, setLogs] = React.useState([]);
-            const [newName, setNewName] = React.useState('');
-            const [entryMode, setEntryMode] = React.useState(null); // null | 'receipt' | 'manual'
-            const [currency, setCurrency] = React.useState('USD');
-            const [logForm, setLogForm] = React.useState({ description: '', amount: '', paidBy: '', splitAmong: [], category: 'Food', date: new Date().toISOString().split('T')[0] });
-            const [apiKey, setApiKey] = React.useState(() => localStorage.getItem('stompr_ak') || '');
-            const [showApiKey, setShowApiKey] = React.useState(false);
-            const [receiptPreview, setReceiptPreview] = React.useState(null);
-            const [analyzing, setAnalyzing] = React.useState(false);
-            const [analysisNote, setAnalysisNote] = React.useState('');
-            const [paymentHandles, setPaymentHandles] = React.useState({});
-            const [showHandles, setShowHandles] = React.useState(false);
-            const [copied, setCopied] = React.useState('');
+            const ls = (k, fb) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : fb; } catch { return fb; } };
+            const [travelers,      setTravelers]      = React.useState(() => ls('stompr_split_travelers', []));
+            const [logs,           setLogs]            = React.useState(() => ls('stompr_split_logs', []));
+            const [currency,       setCurrency]        = React.useState(() => ls('stompr_split_currency', 'USD'));
+            const [paymentHandles, setPaymentHandles]  = React.useState(() => ls('stompr_split_handles', {}));
+            const [newName,        setNewName]         = React.useState('');
+            const [entryMode,      setEntryMode]       = React.useState(null);
+            const [logForm,        setLogForm]         = React.useState({ description: '', amount: '', paidBy: '', splitAmong: [], category: 'Food', date: new Date().toISOString().split('T')[0] });
+            const [apiKey,         setApiKey]          = React.useState(() => localStorage.getItem('stompr_ak') || '');
+            const [showApiKey,     setShowApiKey]      = React.useState(false);
+            const [receiptPreview, setReceiptPreview]  = React.useState(null);
+            const [analyzing,      setAnalyzing]       = React.useState(false);
+            const [analysisNote,   setAnalysisNote]    = React.useState('');
+            const [showHandles,    setShowHandles]     = React.useState(false);
+            const [copied,         setCopied]          = React.useState('');
+
+            React.useEffect(() => { localStorage.setItem('stompr_split_travelers', JSON.stringify(travelers)); }, [travelers]);
+            React.useEffect(() => { localStorage.setItem('stompr_split_logs',      JSON.stringify(logs)); },      [logs]);
+            React.useEffect(() => { localStorage.setItem('stompr_split_currency',  JSON.stringify(currency)); },  [currency]);
+            React.useEffect(() => { localStorage.setItem('stompr_split_handles',   JSON.stringify(paymentHandles)); }, [paymentHandles]);
             const currencies = ['USD','EUR','GBP','JPY','AUD','CAD','CHF','CNY','INR','MXN','BRL','SGD','HKD','THB','TRY'];
             const expCategories = ['Food', 'Transport', 'Accommodation', 'Activities', 'Shopping', 'Health', 'Other'];
             const catColors = { Food:'#F59E0B', Transport:'#0EA5E9', Accommodation:'#8B5CF6', Activities:'#22C55E', Shopping:'#EC4899', Health:'#EF4444', Other:'#6B7280' };
