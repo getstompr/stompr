@@ -222,7 +222,7 @@
         /* Auth Form */
         .auth-container {
             max-width: 480px;
-            margin: 3rem auto;
+            margin: 2rem auto 3rem;
             background: var(--surface);
             border-radius: var(--radius);
             padding: 2.5rem;
@@ -938,18 +938,43 @@
             'sb_publishable_EqqOV0ptjB2hgIhqVsITUA_gDTB6L6n'
         );
 
-        const TRAVEL_PREFERENCES = [
-            'Adventure & Outdoors',
-            'Beach & Relaxation',
-            'Culture & History',
-            'Food & Cuisine',
-            'Nightlife',
-            'Budget Travel',
-            'Luxury Travel',
-            'Solo Travel',
-            'Family Travel',
-            'Road Trips',
+        const TRAVEL_INTERESTS = [
+            { label: 'Food & Cuisine', icon: '🍜' },
+            { label: 'Culture & Museums', icon: '🏛️' },
+            { label: 'Nightlife & Bars', icon: '🍸' },
+            { label: 'Historical Sites', icon: '🏰' },
+            { label: 'Beach & Relaxation', icon: '🏖️' },
+            { label: 'Adventure & Outdoors', icon: '🏔️' },
+            { label: 'Shopping & Markets', icon: '🛍️' },
+            { label: 'Wildlife & Nature', icon: '🦁' },
+            { label: 'Wellness & Spa', icon: '🧘' },
+            { label: 'Road Trips', icon: '🚗' },
+            { label: 'Photography', icon: '📸' },
+            { label: 'Festivals & Events', icon: '🎉' },
+            { label: 'Architecture', icon: '🏗️' },
+            { label: 'Water Sports', icon: '🏄' },
+            { label: 'Pre-planned Packages', icon: '📋' },
+            { label: 'All-Inclusive Resorts', icon: '🏨' },
+            { label: 'Hiking & Trekking', icon: '🥾' },
+            { label: 'Local Experiences', icon: '🤝' },
         ];
+        const TRAVEL_FREQUENCIES = ['Once a year', '2-3 times a year', '4-5 times a year', '6+ times a year', 'Full-time nomad'];
+        const TRAVEL_TYPES = [
+            { label: 'Solo', icon: '🧳' },
+            { label: 'Couple', icon: '💑' },
+            { label: 'Group / Friends', icon: '👯' },
+            { label: 'Family', icon: '👨‍👩‍👧‍👦' },
+            { label: 'Any / All', icon: '🌍' },
+        ];
+        const BUDGET_RANGES = [
+            { label: 'Budget', desc: 'Under $50/day', icon: '💚' },
+            { label: 'Mid-range', desc: '$50–150/day', icon: '💛' },
+            { label: 'Comfortable', desc: '$150–300/day', icon: '🧡' },
+            { label: 'Luxury', desc: '$300+/day', icon: '💎' },
+            { label: 'No limit', desc: 'Sky is the limit', icon: '✨' },
+        ];
+        // Keep old name for backwards compat in ProfileView
+        const TRAVEL_PREFERENCES = TRAVEL_INTERESTS.map(t => t.label);
 
         // ── Shared geocoding helper: resolves coords for places, caches in localStorage ──
         const COORDS_KEY = 'stompr_place_coords';
@@ -1029,6 +1054,8 @@
             const [session, setSession] = useState(null);
             const [loading, setLoading] = useState(true);
             const [isSignUp, setIsSignUp] = useState(false);
+            const [signUpStep, setSignUpStep] = useState(1); // 1 = basics, 2 = traveler profile
+            const [signUpData, setSignUpData] = useState({ full_name: '', username: '', email: '', password: '', phone: '', dob: '', home_base: '', travel_frequency: '', travel_types: [], travel_interests: [], budget: '' });
             const [authError, setAuthError] = useState('');
             const [profileOpen, setProfileOpen] = useState(false);
             const [forgotStep, setForgotStep] = useState(null); // null | 'email' | 'code' | 'reset'
@@ -1161,30 +1188,42 @@
             const handleAuth = async (e) => {
                 e.preventDefault();
                 setAuthError('');
-                const email = e.target.email.value;
-                const password = e.target.password.value;
-                if (isSignUp) {
-                    const fullName = e.target.full_name.value;
-                    const username = e.target.username.value;
-                    const country = e.target.country.value;
-                    const dob = e.target.dob.value;
-                    const phone = e.target.phone.value;
-                    const travelPrefs = TRAVEL_PREFERENCES.filter((_, i) => e.target[`pref_${i}`] && e.target[`pref_${i}`].checked);
-                    const { data, error } = await supabaseClient.auth.signUp({ email, password });
-                    if (error) { setAuthError(error.message); return; }
-                    await supabaseClient.from('profiles').insert({
-                        id: data.user.id,
-                        full_name: fullName,
-                        username,
-                        country,
-                        dob: dob || null,
-                        phone: phone || null,
-                        travel_preferences: travelPrefs
-                    });
-                } else {
+                if (!isSignUp) {
+                    const email = e.target.email.value;
+                    const password = e.target.password.value;
                     const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
                     if (error) setAuthError(error.message);
+                    return;
                 }
+                // Sign-up step 1 → step 2
+                if (signUpStep === 1) {
+                    const d = signUpData;
+                    if (!d.full_name.trim() || !d.email.trim() || !d.password || d.password.length < 6) {
+                        setAuthError('Please fill in all required fields (password must be at least 6 characters).');
+                        return;
+                    }
+                    setAuthError('');
+                    setSignUpStep(2);
+                    return;
+                }
+                // Sign-up step 2 → create account
+                const d = signUpData;
+                const { data, error } = await supabaseClient.auth.signUp({ email: d.email, password: d.password });
+                if (error) { setAuthError(error.message); return; }
+                await supabaseClient.from('profiles').insert({
+                    id: data.user.id,
+                    full_name: d.full_name,
+                    username: d.username,
+                    country: d.home_base,
+                    dob: d.dob || null,
+                    phone: d.phone || null,
+                    home_base: d.home_base || null,
+                    travel_frequency: d.travel_frequency || null,
+                    travel_types: d.travel_types,
+                    travel_interests: d.travel_interests,
+                    budget: d.budget || null,
+                    travel_preferences: d.travel_interests
+                });
             };
 
             const handleLogout = async () => {
@@ -1377,66 +1416,149 @@
                                 {/* ── NORMAL SIGN IN / SIGN UP ── */}
                                 {!forgotStep && (
                                     <>
-                                        <h2 className="auth-title">{isSignUp ? 'Join Stompr' : 'Welcome Back'}</h2>
-                                        {authError && <div className="auth-error">{authError}</div>}
-                                        <form onSubmit={handleAuth}>
-                                            {isSignUp && (
-                                                <>
+                                        {/* ── LOGIN ── */}
+                                        {!isSignUp && (
+                                            <>
+                                                <h2 className="auth-title">Welcome Back</h2>
+                                                {authError && <div className="auth-error">{authError}</div>}
+                                                <form onSubmit={handleAuth}>
+                                                    <div className="form-group">
+                                                        <label>Email</label>
+                                                        <input type="email" name="email" required />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.35rem'}}>
+                                                            <label style={{margin:0}}>Password</label>
+                                                            <button type="button" onClick={() => { setForgotStep('email'); setAuthError(''); }} style={{background:'none', border:'none', color:'var(--primary)', fontSize:'0.82rem', fontWeight:'600', cursor:'pointer', fontFamily:'Inter, sans-serif', padding:0}}>
+                                                                Forgot password?
+                                                            </button>
+                                                        </div>
+                                                        <input type="password" name="password" required minLength="6" />
+                                                    </div>
+                                                    <button type="submit" className="btn btn-primary" style={{width: '100%', marginTop: '1rem'}}>Log In</button>
+                                                </form>
+                                            </>
+                                        )}
+
+                                        {/* ── SIGN UP STEP 1: Basics ── */}
+                                        {isSignUp && signUpStep === 1 && (
+                                            <>
+                                                <h2 className="auth-title">Join Stompr</h2>
+                                                <p style={{color:'var(--text-muted)', fontSize:'0.85rem', textAlign:'center', marginBottom:'1.25rem'}}>Step 1 of 2 — Tell us about yourself</p>
+                                                <div style={{height:'4px', borderRadius:'4px', background:'var(--border)', marginBottom:'1.5rem', overflow:'hidden'}}>
+                                                    <div style={{width:'50%', height:'100%', borderRadius:'4px', background:'var(--primary)', transition:'width 0.3s ease'}} />
+                                                </div>
+                                                {authError && <div className="auth-error">{authError}</div>}
+                                                <form onSubmit={handleAuth}>
                                                     <div className="form-group">
                                                         <label>Full Name</label>
-                                                        <input type="text" name="full_name" required />
+                                                        <input type="text" value={signUpData.full_name} onChange={e => setSignUpData({...signUpData, full_name: e.target.value})} required placeholder="Your full name" />
                                                     </div>
                                                     <div className="form-group">
                                                         <label>Username</label>
-                                                        <input type="text" name="username" required />
+                                                        <input type="text" value={signUpData.username} onChange={e => setSignUpData({...signUpData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')})} required placeholder="Pick a unique username" />
                                                     </div>
                                                     <div className="form-group">
-                                                        <label>Country</label>
-                                                        <input type="text" name="country" placeholder="e.g., United States" required />
+                                                        <label>Email</label>
+                                                        <input type="email" value={signUpData.email} onChange={e => setSignUpData({...signUpData, email: e.target.value})} required placeholder="your@email.com" />
                                                     </div>
                                                     <div className="form-group">
-                                                        <label>Date of Birth</label>
-                                                        <input type="date" name="dob" required />
+                                                        <label>Password</label>
+                                                        <input type="password" value={signUpData.password} onChange={e => setSignUpData({...signUpData, password: e.target.value})} required minLength="6" placeholder="At least 6 characters" />
                                                     </div>
-                                                    <div className="form-group">
-                                                        <label>Phone Number <span style={{color: 'var(--text-muted)', fontWeight: 400}}>(optional)</span></label>
-                                                        <input type="tel" name="phone" placeholder="e.g., +1 555 000 0000" />
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label>Travel Preferences</label>
-                                                        <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem'}}>
-                                                            {TRAVEL_PREFERENCES.map((pref, i) => (
-                                                                <label key={i} style={{display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '20px', padding: '0.3rem 0.75rem', cursor: 'pointer', fontSize: '0.85rem'}}>
-                                                                    <input type="checkbox" name={`pref_${i}`} style={{accentColor: 'var(--primary)'}} />
-                                                                    {pref}
-                                                                </label>
-                                                            ))}
+                                                    <div style={{display:'flex', gap:'0.75rem'}}>
+                                                        <div className="form-group" style={{flex:1}}>
+                                                            <label>Date of Birth</label>
+                                                            <input type="date" value={signUpData.dob} onChange={e => setSignUpData({...signUpData, dob: e.target.value})} required />
+                                                        </div>
+                                                        <div className="form-group" style={{flex:1}}>
+                                                            <label>Phone <span style={{color:'var(--text-muted)', fontWeight:400}}>(optional)</span></label>
+                                                            <input type="tel" value={signUpData.phone} onChange={e => setSignUpData({...signUpData, phone: e.target.value})} placeholder="+1 555 000 0000" />
                                                         </div>
                                                     </div>
-                                                </>
-                                            )}
-                                            <div className="form-group">
-                                                <label>Email</label>
-                                                <input type="email" name="email" required />
-                                            </div>
-                                            <div className="form-group">
-                                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.35rem'}}>
-                                                    <label style={{margin:0}}>Password</label>
-                                                    {!isSignUp && (
-                                                        <button type="button" onClick={() => { setForgotStep('email'); setAuthError(''); }} style={{background:'none', border:'none', color:'var(--primary)', fontSize:'0.82rem', fontWeight:'600', cursor:'pointer', fontFamily:'Inter, sans-serif', padding:0}}>
-                                                            Forgot password?
-                                                        </button>
-                                                    )}
+                                                    <button type="submit" className="btn btn-primary" style={{width:'100%', marginTop:'1rem'}}>
+                                                        Continue
+                                                    </button>
+                                                </form>
+                                            </>
+                                        )}
+
+                                        {/* ── SIGN UP STEP 2: Traveler Profile ── */}
+                                        {isSignUp && signUpStep === 2 && (
+                                            <>
+                                                <h2 className="auth-title">Your Travel Profile</h2>
+                                                <p style={{color:'var(--text-muted)', fontSize:'0.85rem', textAlign:'center', marginBottom:'1.25rem'}}>Step 2 of 2 — Help us personalize your experience</p>
+                                                <div style={{height:'4px', borderRadius:'4px', background:'var(--border)', marginBottom:'1.5rem', overflow:'hidden'}}>
+                                                    <div style={{width:'100%', height:'100%', borderRadius:'4px', background:'var(--primary)', transition:'width 0.3s ease'}} />
                                                 </div>
-                                                <input type="password" name="password" required minLength="6" />
-                                            </div>
-                                            <button type="submit" className="btn btn-primary" style={{width: '100%', marginTop: '1rem'}}>
-                                                {isSignUp ? 'Sign Up' : 'Log In'}
-                                            </button>
-                                        </form>
+                                                {authError && <div className="auth-error">{authError}</div>}
+                                                <form onSubmit={handleAuth}>
+                                                    <div className="form-group">
+                                                        <label>Home Base</label>
+                                                        <input type="text" value={signUpData.home_base} onChange={e => setSignUpData({...signUpData, home_base: e.target.value})} placeholder="City or country you live in" />
+                                                    </div>
+
+                                                    <div className="form-group">
+                                                        <label>How often do you travel?</label>
+                                                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.4rem', marginTop:'0.35rem'}}>
+                                                            {TRAVEL_FREQUENCIES.map(f => {
+                                                                const sel = signUpData.travel_frequency === f;
+                                                                return <button type="button" key={f} onClick={() => setSignUpData({...signUpData, travel_frequency: f})} style={{padding:'0.4rem 0.85rem', borderRadius:'20px', border: sel ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: sel ? 'rgba(14,165,233,0.1)' : 'var(--card-bg)', color: sel ? 'var(--primary)' : 'var(--text)', fontWeight: sel ? '700' : '500', fontSize:'0.82rem', cursor:'pointer', fontFamily:'Inter, sans-serif', transition:'all 0.15s'}}>{f}</button>;
+                                                            })}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="form-group">
+                                                        <label>How do you usually travel?</label>
+                                                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.4rem', marginTop:'0.35rem'}}>
+                                                            {TRAVEL_TYPES.map(t => {
+                                                                const sel = signUpData.travel_types.includes(t.label);
+                                                                return <button type="button" key={t.label} onClick={() => setSignUpData({...signUpData, travel_types: sel ? signUpData.travel_types.filter(x => x !== t.label) : [...signUpData.travel_types, t.label]})} style={{padding:'0.4rem 0.85rem', borderRadius:'20px', border: sel ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: sel ? 'rgba(14,165,233,0.1)' : 'var(--card-bg)', color: sel ? 'var(--primary)' : 'var(--text)', fontWeight: sel ? '700' : '500', fontSize:'0.82rem', cursor:'pointer', fontFamily:'Inter, sans-serif', transition:'all 0.15s'}}>{t.icon} {t.label}</button>;
+                                                            })}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="form-group">
+                                                        <label>What's important to you? <span style={{color:'var(--text-muted)', fontWeight:400}}>(pick all that apply)</span></label>
+                                                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.4rem', marginTop:'0.35rem'}}>
+                                                            {TRAVEL_INTERESTS.map(t => {
+                                                                const sel = signUpData.travel_interests.includes(t.label);
+                                                                return <button type="button" key={t.label} onClick={() => setSignUpData({...signUpData, travel_interests: sel ? signUpData.travel_interests.filter(x => x !== t.label) : [...signUpData.travel_interests, t.label]})} style={{padding:'0.4rem 0.85rem', borderRadius:'20px', border: sel ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: sel ? 'rgba(14,165,233,0.1)' : 'var(--card-bg)', color: sel ? 'var(--primary)' : 'var(--text)', fontWeight: sel ? '700' : '500', fontSize:'0.82rem', cursor:'pointer', fontFamily:'Inter, sans-serif', transition:'all 0.15s'}}>{t.icon} {t.label}</button>;
+                                                            })}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="form-group">
+                                                        <label>What's your typical travel budget?</label>
+                                                        <div style={{display:'flex', flexDirection:'column', gap:'0.4rem', marginTop:'0.35rem'}}>
+                                                            {BUDGET_RANGES.map(b => {
+                                                                const sel = signUpData.budget === b.label;
+                                                                return <button type="button" key={b.label} onClick={() => setSignUpData({...signUpData, budget: b.label})} style={{display:'flex', alignItems:'center', gap:'0.65rem', padding:'0.65rem 1rem', borderRadius:'12px', border: sel ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: sel ? 'rgba(14,165,233,0.08)' : 'var(--card-bg)', cursor:'pointer', fontFamily:'Inter, sans-serif', transition:'all 0.15s', textAlign:'left'}}>
+                                                                    <span style={{fontSize:'1.2rem'}}>{b.icon}</span>
+                                                                    <div>
+                                                                        <div style={{fontWeight: sel ? '700' : '600', fontSize:'0.88rem', color: sel ? 'var(--primary)' : 'var(--text)'}}>{b.label}</div>
+                                                                        <div style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{b.desc}</div>
+                                                                    </div>
+                                                                </button>;
+                                                            })}
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{display:'flex', gap:'0.75rem', marginTop:'1rem'}}>
+                                                        <button type="button" onClick={() => { setSignUpStep(1); setAuthError(''); }} style={{flex:1, padding:'0.7rem', borderRadius:'12px', border:'1.5px solid var(--border)', background:'none', color:'var(--text)', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.9rem', cursor:'pointer'}}>
+                                                            Back
+                                                        </button>
+                                                        <button type="submit" className="btn btn-primary" style={{flex:2}}>
+                                                            Create Account
+                                                        </button>
+                                                    </div>
+                                                </form>
+                                            </>
+                                        )}
+
                                         <div className="auth-toggle">
                                             {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-                                            <button onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}>
+                                            <button onClick={() => { setIsSignUp(!isSignUp); setSignUpStep(1); setAuthError(''); setSignUpData({ full_name: '', username: '', email: '', password: '', phone: '', dob: '', home_base: '', travel_frequency: '', travel_types: [], travel_interests: [], budget: '' }); }}>
                                                 {isSignUp ? 'Log In' : 'Sign Up'}
                                             </button>
                                         </div>
