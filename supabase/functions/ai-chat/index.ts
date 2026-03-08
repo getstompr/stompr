@@ -6,6 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const DAILY_LIMIT = 20 // max messages per user per day
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -14,7 +16,7 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'No authorization header' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
@@ -34,13 +36,23 @@ serve(async (req) => {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('credits')
+      .select('credits, daily_messages_count, daily_messages_date')
       .eq('id', user.id)
       .single()
 
     if (!profile || profile.credits <= 0) {
       return new Response(JSON.stringify({ error: 'no_credits' }), {
         status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // Reset daily count if it's a new day
+    const today = new Date().toISOString().split('T')[0]
+    const dailyCount = profile.daily_messages_date === today ? (profile.daily_messages_count || 0) : 0
+
+    if (dailyCount >= DAILY_LIMIT) {
+      return new Response(JSON.stringify({ error: 'daily_limit' }), {
+        status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
@@ -72,10 +84,18 @@ serve(async (req) => {
 
     await supabase
       .from('profiles')
-      .update({ credits: newCredits })
+      .update({
+        credits: newCredits,
+        daily_messages_count: dailyCount + 1,
+        daily_messages_date: today,
+      })
       .eq('id', user.id)
 
-    return new Response(JSON.stringify({ message: responseText, credits_remaining: newCredits }), {
+    return new Response(JSON.stringify({
+      message: responseText,
+      credits_remaining: newCredits,
+      daily_remaining: DAILY_LIMIT - (dailyCount + 1),
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   } catch (error) {
