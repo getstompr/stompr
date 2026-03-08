@@ -348,27 +348,33 @@
 
         /* Tabs */
         .tabs {
+            position: sticky;
+            top: 0;
+            z-index: 100;
             display: flex;
             justify-content: center;
             gap: 0.25rem;
-            margin: 0 auto;
-            padding: 0.5rem 1rem;
-            max-width: 720px;
-            flex-wrap: wrap;
-            border-bottom: none;
+            padding: 0.6rem 1rem;
+            flex-wrap: nowrap;
+            white-space: nowrap;
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
 
         .tab {
-            padding: 0.55rem 1.1rem;
+            padding: 0.5rem 1rem;
             background: transparent;
             border: none;
             border-radius: 999px;
             color: var(--text-muted);
             font-family: 'Inter', sans-serif;
             font-weight: 600;
-            font-size: 0.82rem;
+            font-size: 0.8rem;
             cursor: pointer;
             transition: all 0.2s ease;
+            flex-shrink: 0;
         }
 
         .tab.active {
