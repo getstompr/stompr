@@ -943,6 +943,55 @@
             'Road Trips',
         ];
 
+        // ── Shared geocoding helper: resolves coords for places, caches in localStorage ──
+        const COORDS_KEY = 'stompr_place_coords';
+        const getCoordsCache = () => { try { return JSON.parse(localStorage.getItem(COORDS_KEY)) || {}; } catch { return {}; } };
+        const saveCoordsCache = (cache) => { localStorage.setItem(COORDS_KEY, JSON.stringify(cache)); };
+
+        async function resolveAllCoords(places) {
+            const cache = getCoordsCache();
+            const results = {};
+            const toFetch = [];
+            (places || []).forEach(p => {
+                const key = p.name.toLowerCase();
+                if (cache[key]) { results[key] = cache[key]; }
+                else { toFetch.push(p.name); }
+            });
+            // Geocode missing places via Nominatim (sequential to respect rate limits)
+            for (const name of toFetch) {
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name)}&format=json&limit=1`);
+                    const data = await res.json();
+                    if (data && data[0]) {
+                        const coord = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                        results[name.toLowerCase()] = coord;
+                        cache[name.toLowerCase()] = coord;
+                    }
+                } catch {}
+                // Small delay to respect Nominatim rate limit
+                await new Promise(r => setTimeout(r, 300));
+            }
+            if (toFetch.length > 0) saveCoordsCache(cache);
+            return results;
+        }
+
+        function addMarkersToMap(map, places, coordsMap) {
+            const markers = [];
+            const bounds = [];
+            (places || []).forEach(place => {
+                const coord = coordsMap[place.name.toLowerCase()];
+                if (!coord) return;
+                const color = place.visited ? '#22C55E' : '#EF4444';
+                const label = place.visited ? 'Visited' : 'Bucket List';
+                const m = L.circleMarker([coord.lat, coord.lng], { radius: 7, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
+                m.bindPopup(`<strong>${place.name}</strong><br/><span style="color:${color};font-weight:700">${label}</span>`);
+                markers.push(m);
+                bounds.push([coord.lat, coord.lng]);
+            });
+            if (bounds.length > 0) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
+            return markers;
+        }
+
         function App() {
             const [session, setSession] = useState(null);
             const [loading, setLoading] = useState(true);
@@ -2374,23 +2423,10 @@
                 if (!communityMapObj.current || !places) return;
                 communityMarkersRef.current.forEach(m => m.remove());
                 communityMarkersRef.current = [];
-                const coordsCache = (() => { try { return JSON.parse(localStorage.getItem('stompr_place_coords')) || {}; } catch { return {}; } })();
-                const bounds = [];
-                places.forEach(place => {
-                    const cached = coordsCache[place.name.toLowerCase()];
-                    if (!cached) return;
-                    const color = place.visited ? '#22C55E' : '#EF4444';
-                    const label = place.visited ? 'Visited' : 'Bucket List';
-                    const marker = L.circleMarker([cached.lat, cached.lng], {
-                        radius: 7, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.9
-                    }).addTo(communityMapObj.current);
-                    marker.bindPopup(`<strong>${place.name}</strong><br/><span style="color:${color};font-weight:700">${label}</span>`);
-                    communityMarkersRef.current.push(marker);
-                    bounds.push([cached.lat, cached.lng]);
+                resolveAllCoords(places).then(coordsMap => {
+                    if (!communityMapObj.current) return;
+                    communityMarkersRef.current = addMarkersToMap(communityMapObj.current, places, coordsMap);
                 });
-                if (bounds.length > 0) {
-                    communityMapObj.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
-                }
             }, [places, communityTab]);
 
             const displayName = (profile?.full_name || session?.user?.email?.split('@')[0] || 'Traveler').split(' ')[0];
@@ -2920,19 +2956,11 @@
                 }).addTo(map);
                 mapObj.current = map;
                 setTimeout(() => map.invalidateSize(), 200);
-                // Add markers
-                const coordsCache = (() => { try { return JSON.parse(localStorage.getItem('stompr_place_coords')) || {}; } catch { return {}; } })();
-                const bounds = [];
-                userPlaces.forEach(place => {
-                    const cached = coordsCache[place.name.toLowerCase()];
-                    if (!cached) return;
-                    const color = place.visited ? '#22C55E' : '#EF4444';
-                    const label = place.visited ? 'Visited' : 'Bucket List';
-                    L.circleMarker([cached.lat, cached.lng], { radius: 7, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.9 })
-                        .addTo(map).bindPopup(`<strong>${place.name}</strong><br/><span style="color:${color};font-weight:700">${label}</span>`);
-                    bounds.push([cached.lat, cached.lng]);
+                // Add markers with geocoding
+                resolveAllCoords(userPlaces).then(coordsMap => {
+                    if (!mapObj.current) return;
+                    addMarkersToMap(mapObj.current, userPlaces, coordsMap);
                 });
-                if (bounds.length > 0) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
                 return () => { map.remove(); mapObj.current = null; };
             }, [loading, userPlaces]);
 
@@ -2993,7 +3021,7 @@
                     </button>
 
                     {/* ── Timeline Map (cover photo equivalent) ── */}
-                    <div style={{borderRadius:'16px', overflow:'hidden', border:'1px solid var(--border)', marginBottom:'-2.5rem', position:'relative'}}>
+                    <div style={{borderRadius:'16px', overflow:'hidden', border:'1px solid var(--border)', marginBottom:'1rem', position:'relative'}}>
                         <div ref={mapRef} style={{height:'220px', width:'100%'}} />
                         <div style={{position:'absolute', bottom:'0.5rem', right:'0.75rem', background:'rgba(0,0,0,0.55)', color:'#fff', fontSize:'0.7rem', padding:'3px 10px', borderRadius:'12px', fontWeight:'600', backdropFilter:'blur(4px)'}}>
                             {visitedCount} visited · {bucketCount} bucket list
@@ -3002,7 +3030,7 @@
 
                     {/* ── Profile card ── */}
                     <div style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'16px', padding:'1.25rem', marginBottom:'1.5rem', boxShadow:'0 2px 8px rgba(0,0,0,0.06)'}}>
-                        <div style={{display:'flex', alignItems:'flex-end', gap:'1rem', marginTop:'-3rem', marginBottom:'1rem'}}>
+                        <div style={{display:'flex', alignItems:'center', gap:'1rem', marginBottom:'1rem'}}>
                             <div style={{width:'80px', height:'80px', borderRadius:'50%', border:'4px solid var(--card-bg)', overflow:'hidden', background:profColor, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:'1.8rem', fontWeight:'700', flexShrink:0, boxShadow:'0 2px 8px rgba(0,0,0,0.15)'}}>
                                 {profileData?.avatar_url
                                     ? <img src={profileData.avatar_url} alt="" style={{width:'100%', height:'100%', objectFit:'cover'}} />
@@ -3158,17 +3186,13 @@
                 if (!mapObj.current) return;
                 markersRef.current.forEach(m => m.remove());
                 markersRef.current = [];
-                const cache = getCache();
-                places.forEach(place => {
-                    const c = cache[place.name.toLowerCase()];
-                    if (!c) return;
-                    const marker = L.circleMarker([c.lat, c.lng], {
-                        radius: 9, fillColor: place.visited ? '#22c55e' : '#FF5A5F',
-                        color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.9
-                    }).addTo(mapObj.current);
-                    marker.bindPopup(`<strong>${place.name}</strong><br><span style="font-size:0.8rem">${place.visited ? '✓ Visited' : '♥ Bucket List'}</span>`);
-                    markersRef.current.push(marker);
+                if (!places || places.length === 0) return;
+                let cancelled = false;
+                resolveAllCoords(places).then(coordsMap => {
+                    if (cancelled || !mapObj.current) return;
+                    markersRef.current = addMarkersToMap(mapObj.current, places, coordsMap);
                 });
+                return () => { cancelled = true; };
             }, [places]);
 
             return (
