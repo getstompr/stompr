@@ -2027,39 +2027,136 @@
         }
 
         function PlacesView({ places, onAddPlace, onToggleStatus, onDeletePlace }) {
+            const { useState, useEffect, useRef } = React;
             const [placeName, setPlaceName] = useState('');
             const [isVisited, setIsVisited] = useState(false);
+            const [suggestions, setSuggestions] = useState([]);
+            const [selectedCoords, setSelectedCoords] = useState(null);
+            const debounceRef = useRef(null);
+            const mapRef     = useRef(null);
+            const mapObj     = useRef(null);
+            const markersRef = useRef([]);
 
             const visitedPlaces = places.filter(p => p.visited);
-            const bucketList = places.filter(p => !p.visited);
+            const bucketList    = places.filter(p => !p.visited);
+
+            // ── Coords cache ──
+            const COORDS_KEY = 'stompr_place_coords';
+            const getCache   = () => { try { return JSON.parse(localStorage.getItem(COORDS_KEY)) || {}; } catch { return {}; } };
+            const cacheCoord = (name, lat, lng) => {
+                const c = getCache(); c[name.toLowerCase()] = { lat, lng };
+                localStorage.setItem(COORDS_KEY, JSON.stringify(c));
+            };
+
+            // ── Nominatim autocomplete ──
+            const onInputChange = (val) => {
+                setPlaceName(val);
+                setSelectedCoords(null);
+                clearTimeout(debounceRef.current);
+                if (val.length < 2) { setSuggestions([]); return; }
+                debounceRef.current = setTimeout(async () => {
+                    try {
+                        const res  = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=5&addressdetails=0`);
+                        const data = await res.json();
+                        setSuggestions(data);
+                    } catch { setSuggestions([]); }
+                }, 350);
+            };
+
+            const pickSuggestion = (s) => {
+                const label = s.display_name.split(',').slice(0, 2).join(',').trim();
+                setPlaceName(label);
+                setSelectedCoords({ lat: parseFloat(s.lat), lng: parseFloat(s.lon) });
+                setSuggestions([]);
+                // Pan map to selection
+                if (mapObj.current) mapObj.current.setView([parseFloat(s.lat), parseFloat(s.lon)], 10, { animate: true });
+            };
 
             const handleAdd = (e) => {
                 e.preventDefault();
-                if (placeName.trim()) {
-                    onAddPlace(placeName.trim(), isVisited);
-                    setPlaceName('');
-                }
+                if (!placeName.trim()) return;
+                if (selectedCoords) cacheCoord(placeName.trim(), selectedCoords.lat, selectedCoords.lng);
+                onAddPlace(placeName.trim(), isVisited);
+                setPlaceName('');
+                setSelectedCoords(null);
+                setSuggestions([]);
             };
+
+            // ── Leaflet map init ──
+            useEffect(() => {
+                if (!mapRef.current || mapObj.current) return;
+                const map = L.map(mapRef.current, { zoomControl: true }).setView([20, 0], 2);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                }).addTo(map);
+                mapObj.current = map;
+                return () => { map.remove(); mapObj.current = null; };
+            }, []);
+
+            // ── Update markers when places change ──
+            useEffect(() => {
+                if (!mapObj.current) return;
+                markersRef.current.forEach(m => m.remove());
+                markersRef.current = [];
+                const cache = getCache();
+                places.forEach(place => {
+                    const c = cache[place.name.toLowerCase()];
+                    if (!c) return;
+                    const marker = L.circleMarker([c.lat, c.lng], {
+                        radius: 9, fillColor: place.visited ? '#22c55e' : '#FF5A5F',
+                        color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.9
+                    }).addTo(mapObj.current);
+                    marker.bindPopup(`<strong>${place.name}</strong><br><span style="font-size:0.8rem">${place.visited ? '✓ Visited' : '♥ Bucket List'}</span>`);
+                    markersRef.current.push(marker);
+                });
+            }, [places]);
 
             return (
                 <div>
-                    {/* ── Inline add bar ── */}
-                    <form onSubmit={handleAdd} style={{display:'flex', gap:'0.6rem', alignItems:'center', marginBottom:'2rem'}}>
-                        <input
-                            type="text"
-                            value={placeName}
-                            onChange={e => setPlaceName(e.target.value)}
-                            placeholder="Type a place…"
-                            style={{flex:1, padding:'0.65rem 1rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.9rem', background:'var(--card-bg)', color:'var(--text)', outline:'none'}}
-                        />
-                        <select value={isVisited ? 'visited' : 'bucket'} onChange={e => setIsVisited(e.target.value === 'visited')} style={{padding:'0.65rem 0.75rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.85rem', background:'var(--card-bg)', color:'var(--text)', cursor:'pointer'}}>
-                            <option value="bucket">Bucket List</option>
-                            <option value="visited">Visited</option>
-                        </select>
-                        <button type="submit" disabled={!placeName.trim()} style={{width:'38px', height:'38px', borderRadius:'50%', border:'none', background:'var(--primary)', color:'#fff', fontSize:'1.4rem', lineHeight:1, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', flexShrink:0, opacity: placeName.trim() ? 1 : 0.4, transition:'opacity 0.15s'}}>
-                            +
-                        </button>
+                    {/* ── Search + add bar ── */}
+                    <form onSubmit={handleAdd} style={{marginBottom:'0.4rem'}}>
+                        <div style={{position:'relative', display:'flex', gap:'0.6rem', alignItems:'center'}}>
+                            <div style={{flex:1, position:'relative'}}>
+                                <input
+                                    type="text"
+                                    value={placeName}
+                                    onChange={e => onInputChange(e.target.value)}
+                                    onBlur={() => setTimeout(() => setSuggestions([]), 200)}
+                                    placeholder="Search for a place…"
+                                    autoComplete="off"
+                                    style={{width:'100%', padding:'0.7rem 1rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.9rem', background:'var(--card-bg)', color:'var(--text)', outline:'none', boxSizing:'border-box'}}
+                                />
+                                {suggestions.length > 0 && (
+                                    <div style={{position:'absolute', top:'calc(100% + 6px)', left:0, right:0, background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'12px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:999, overflow:'hidden'}}>
+                                        {suggestions.map((s, i) => (
+                                            <div key={i} onMouseDown={() => pickSuggestion(s)} style={{padding:'0.65rem 1rem', cursor:'pointer', fontSize:'0.85rem', color:'var(--text)', borderBottom: i < suggestions.length - 1 ? '1px solid var(--border)' : 'none', display:'flex', alignItems:'center', gap:'0.6rem'}}
+                                                onMouseEnter={e => e.currentTarget.style.background='var(--bg)'}
+                                                onMouseLeave={e => e.currentTarget.style.background='transparent'}
+                                            >
+                                                <span style={{fontSize:'1rem', flexShrink:0}}>📍</span>
+                                                <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{s.display_name}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <select value={isVisited ? 'visited' : 'bucket'} onChange={e => setIsVisited(e.target.value === 'visited')} style={{padding:'0.7rem 0.75rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.84rem', background:'var(--card-bg)', color:'var(--text)', cursor:'pointer', flexShrink:0}}>
+                                <option value="bucket">Bucket List</option>
+                                <option value="visited">Visited</option>
+                            </select>
+                            <button type="submit" disabled={!placeName.trim()} style={{width:'40px', height:'40px', borderRadius:'50%', border:'none', background:'var(--primary)', color:'#fff', fontSize:'1.4rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', flexShrink:0, opacity: placeName.trim() ? 1 : 0.4, transition:'opacity 0.15s'}}>
+                                +
+                            </button>
+                        </div>
                     </form>
+
+                    {/* ── Map ── */}
+                    <div style={{marginBottom:'2rem'}}>
+                        <div ref={mapRef} style={{width:'100%', height:'300px', borderRadius:'14px', overflow:'hidden', border:'1px solid var(--border)', marginTop:'1rem'}} />
+                        <p style={{fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'0.4rem'}}>
+                            🔴 Bucket list &nbsp;·&nbsp; 🟢 Visited &nbsp;·&nbsp; © OpenStreetMap contributors
+                        </p>
+                    </div>
 
                     <div style={{marginBottom: '3rem'}}>
                         <h2 style={{fontSize: '1.25rem', fontWeight: '700', marginBottom: '1.25rem', color: 'var(--text)'}}>
