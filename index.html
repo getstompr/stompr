@@ -2335,12 +2335,14 @@
                 searchDebounce.current = setTimeout(async () => {
                     setSearching(true);
                     try {
-                        const { data } = await supabaseClient
+                        const pattern = `%${query}%`;
+                        const { data, error } = await supabaseClient
                             .from('profiles')
                             .select('id, full_name, username')
-                            .or(`full_name.ilike.%${query}%,username.ilike.%${query}%`)
+                            .or(`full_name.ilike.${pattern},username.ilike.${pattern}`)
                             .neq('id', session.user.id)
                             .limit(10);
+                        if (error) console.error('Friend search error:', error);
                         setSearchResults(data || []);
                     } catch { setSearchResults([]); }
                     setSearching(false);
