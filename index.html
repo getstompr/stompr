@@ -56,10 +56,10 @@
         /* Header */
         header {
             background: var(--surface);
-            padding: 1rem 2rem;
+            padding: 0.75rem 2rem 0.5rem;
             position: sticky;
             top: 0;
-            z-index: 100;
+            z-index: 110;
             border-bottom: 1px solid var(--border);
             box-shadow: var(--shadow-sm);
         }
@@ -348,19 +348,12 @@
 
         /* Tabs */
         .tabs {
-            position: sticky;
-            top: 0;
-            z-index: 100;
             display: flex;
             justify-content: center;
             gap: 0.25rem;
-            padding: 0.6rem 1rem;
+            padding: 0.5rem 0 0;
             flex-wrap: nowrap;
             white-space: nowrap;
-            background: var(--bg);
-            border-bottom: 1px solid var(--border);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
         }
 
         .tab {
@@ -1672,15 +1665,14 @@
                                 </div>
                             </div>
                         </div>
+                        <div className="tabs">
+                            <button className={`tab ${activeTab === 'ai' ? 'active' : ''}`} onClick={() => setActiveTab('ai')}>AI Travel Assistant</button>
+                            <button className={`tab ${activeTab === 'packing' ? 'active' : ''}`} onClick={() => setActiveTab('packing')}>Packing Lists</button>
+                            <button className={`tab ${activeTab === 'places' ? 'active' : ''}`} onClick={() => setActiveTab('places')}>Bucket List & Visited</button>
+                            <button className={`tab ${activeTab === 'expenses' ? 'active' : ''}`} onClick={() => setActiveTab('expenses')}>Budget & Expenses</button>
+                            <button className={`tab ${activeTab === 'community' ? 'active' : ''}`} onClick={() => setActiveTab('community')}>Community</button>
+                        </div>
                     </header>
-
-                    <div className="tabs">
-                        <button className={`tab ${activeTab === 'ai' ? 'active' : ''}`} onClick={() => setActiveTab('ai')}>AI Travel Assistant</button>
-                        <button className={`tab ${activeTab === 'packing' ? 'active' : ''}`} onClick={() => setActiveTab('packing')}>Packing Lists</button>
-                        <button className={`tab ${activeTab === 'places' ? 'active' : ''}`} onClick={() => setActiveTab('places')}>Bucket List & Visited</button>
-                        <button className={`tab ${activeTab === 'expenses' ? 'active' : ''}`} onClick={() => setActiveTab('expenses')}>Budget & Expenses</button>
-                        <button className={`tab ${activeTab === 'community' ? 'active' : ''}`} onClick={() => setActiveTab('community')}>Community</button>
-                    </div>
 
                     <div className="main-content">
                         <div className="dashboard">
