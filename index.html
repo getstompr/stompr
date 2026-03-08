@@ -1430,6 +1430,12 @@
                                 >
                                     Budget & Expenses
                                 </button>
+                                <button
+                                    className={`tab ${activeTab === 'community' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('community')}
+                                >
+                                    Community
+                                </button>
                             </div>
 
                             {activeTab === 'packing' && (
@@ -1451,6 +1457,10 @@
 
                             {activeTab === 'expenses' && (
                                 <ExpensesView />
+                            )}
+
+                            {activeTab === 'community' && (
+                                <CommunityView session={session} profile={profile} />
                             )}
 
                             {activeTab === 'profile' && (
@@ -2138,6 +2148,254 @@
                             {message && <span style={{color: message.startsWith('Error') ? 'var(--danger)' : 'green', fontSize: '0.9rem'}}>{message}</span>}
                         </div>
                     </form>
+                </div>
+            );
+        }
+
+        function CommunityView({ session, profile }) {
+            const { useState, useEffect, useRef } = React;
+            const POSTS_KEY = 'stompr_community_posts';
+            const [posts, setPosts] = useState(() => { try { return JSON.parse(localStorage.getItem(POSTS_KEY)) || []; } catch { return []; } });
+            const [showCompose, setShowCompose] = useState(false);
+            const [composeText, setComposeText] = useState('');
+            const [composeTag, setComposeTag] = useState('itinerary');
+            const [composeImages, setComposeImages] = useState([]);
+            const [activeFilter, setActiveFilter] = useState('all');
+            const fileRef = useRef(null);
+
+            useEffect(() => { localStorage.setItem(POSTS_KEY, JSON.stringify(posts)); }, [posts]);
+
+            const userName = profile?.full_name || session?.user?.email?.split('@')[0] || 'Traveler';
+            const userInitial = userName[0].toUpperCase();
+            const avatarColors = ['#0EA5E9','#F59E0B','#22C55E','#EC4899','#8B5CF6','#EF4444','#F97316','#14B8A6'];
+            const myColor = avatarColors[userName.length % avatarColors.length];
+
+            const TAGS = [
+                { value:'itinerary', label:'Itinerary', icon:'🗺️', color:'#0EA5E9' },
+                { value:'photos',    label:'Photos',    icon:'📸', color:'#22C55E' },
+                { value:'tips',      label:'Tips',      icon:'💡', color:'#F59E0B' },
+                { value:'promo',     label:'Deal/Promo', icon:'🏷️', color:'#EC4899' },
+                { value:'question',  label:'Question',  icon:'❓', color:'#8B5CF6' },
+                { value:'story',     label:'Story',     icon:'✈️', color:'#F97316' },
+            ];
+
+            const handleImageUpload = (e) => {
+                const files = Array.from(e.target.files);
+                files.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => setComposeImages(prev => [...prev, ev.target.result]);
+                    reader.readAsDataURL(file);
+                });
+            };
+
+            const submitPost = () => {
+                if (!composeText.trim() && composeImages.length === 0) return;
+                const newPost = {
+                    id: Date.now(),
+                    author: userName,
+                    initial: userInitial,
+                    color: myColor,
+                    text: composeText.trim(),
+                    tag: composeTag,
+                    images: composeImages,
+                    timestamp: new Date().toISOString(),
+                    likes: 0,
+                    liked: false,
+                    comments: [],
+                };
+                setPosts(prev => [newPost, ...prev]);
+                setComposeText('');
+                setComposeImages([]);
+                setShowCompose(false);
+            };
+
+            const toggleLike = (id) => {
+                setPosts(prev => prev.map(p => p.id === id ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p));
+            };
+
+            const addComment = (id, text) => {
+                if (!text.trim()) return;
+                setPosts(prev => prev.map(p => p.id === id ? { ...p, comments: [...p.comments, { author: userName, initial: userInitial, color: myColor, text: text.trim(), timestamp: new Date().toISOString() }] } : p));
+            };
+
+            const deletePost = (id) => {
+                setPosts(prev => prev.filter(p => p.id !== id));
+            };
+
+            const timeAgo = (iso) => {
+                const diff = Date.now() - new Date(iso).getTime();
+                const mins = Math.floor(diff / 60000);
+                if (mins < 1) return 'just now';
+                if (mins < 60) return mins + 'm ago';
+                const hrs = Math.floor(mins / 60);
+                if (hrs < 24) return hrs + 'h ago';
+                const days = Math.floor(hrs / 24);
+                return days + 'd ago';
+            };
+
+            const filtered = activeFilter === 'all' ? posts : posts.filter(p => p.tag === activeFilter);
+
+            return (
+                <div style={{maxWidth:'620px', margin:'0 auto'}}>
+                    <h2 style={{fontSize:'1.3rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.2rem'}}>Community</h2>
+                    <p style={{color:'var(--text-muted)', fontSize:'0.88rem', marginBottom:'1.25rem'}}>Share itineraries, travel photos, tips, and deals with fellow travelers.</p>
+
+                    {/* ── Compose ── */}
+                    {!showCompose ? (
+                        <div onClick={() => setShowCompose(true)} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'14px', padding:'0.85rem 1rem', cursor:'pointer', marginBottom:'1.5rem', transition:'box-shadow 0.15s'}}
+                            onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'}
+                            onMouseLeave={e => e.currentTarget.style.boxShadow='none'}
+                        >
+                            <div style={{width:'36px', height:'36px', borderRadius:'50%', background:myColor, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{userInitial}</div>
+                            <span style={{color:'var(--text-muted)', fontSize:'0.9rem'}}>Share something with the community…</span>
+                        </div>
+                    ) : (
+                        <div style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'14px', padding:'1.25rem', marginBottom:'1.5rem', boxShadow:'0 4px 16px rgba(0,0,0,0.08)'}}>
+                            <div style={{display:'flex', alignItems:'center', gap:'0.6rem', marginBottom:'1rem'}}>
+                                <div style={{width:'36px', height:'36px', borderRadius:'50%', background:myColor, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{userInitial}</div>
+                                <div style={{fontWeight:'700', fontSize:'0.92rem', color:'var(--text)'}}>{userName}</div>
+                            </div>
+                            <textarea
+                                value={composeText}
+                                onChange={e => setComposeText(e.target.value)}
+                                placeholder="What's on your travel mind?"
+                                rows="4"
+                                autoFocus
+                                style={{width:'100%', border:'none', outline:'none', resize:'vertical', fontFamily:'Inter, sans-serif', fontSize:'0.92rem', color:'var(--text)', background:'transparent', lineHeight:'1.6', boxSizing:'border-box'}}
+                            />
+
+                            {/* Image previews */}
+                            {composeImages.length > 0 && (
+                                <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap', marginTop:'0.75rem'}}>
+                                    {composeImages.map((img, i) => (
+                                        <div key={i} style={{position:'relative'}}>
+                                            <img src={img} alt="" style={{width:'80px', height:'80px', objectFit:'cover', borderRadius:'8px', border:'1px solid var(--border)'}} />
+                                            <button onClick={() => setComposeImages(prev => prev.filter((_, j) => j !== i))} style={{position:'absolute', top:'-6px', right:'-6px', width:'20px', height:'20px', borderRadius:'50%', background:'var(--danger)', color:'#fff', border:'none', fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700'}}>×</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div style={{borderTop:'1px solid var(--border)', marginTop:'1rem', paddingTop:'0.85rem', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.75rem'}}>
+                                <div style={{display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap'}}>
+                                    {/* Tag selector */}
+                                    <select value={composeTag} onChange={e => setComposeTag(e.target.value)} style={{padding:'0.35rem 0.65rem', borderRadius:'20px', border:'1.5px solid var(--border)', fontSize:'0.8rem', fontFamily:'Inter, sans-serif', background:'var(--card-bg)', color:'var(--text)', cursor:'pointer'}}>
+                                        {TAGS.map(t => <option key={t.value} value={t.value}>{t.icon} {t.label}</option>)}
+                                    </select>
+                                    {/* Photo upload */}
+                                    <button onClick={() => fileRef.current?.click()} style={{background:'none', border:'1.5px solid var(--border)', borderRadius:'20px', padding:'0.35rem 0.75rem', fontSize:'0.8rem', cursor:'pointer', fontFamily:'Inter, sans-serif', color:'var(--text)', display:'flex', alignItems:'center', gap:'0.3rem'}}>
+                                        📷 Photo
+                                    </button>
+                                    <input ref={fileRef} type="file" accept="image/*" multiple style={{display:'none'}} onChange={handleImageUpload} />
+                                </div>
+                                <div style={{display:'flex', gap:'0.5rem'}}>
+                                    <button onClick={() => { setShowCompose(false); setComposeText(''); setComposeImages([]); }} style={{padding:'0.4rem 1rem', borderRadius:'20px', border:'1.5px solid var(--border)', background:'none', fontFamily:'Inter, sans-serif', fontSize:'0.83rem', color:'var(--text-muted)', cursor:'pointer', fontWeight:'600'}}>Cancel</button>
+                                    <button onClick={submitPost} disabled={!composeText.trim() && composeImages.length === 0} style={{padding:'0.4rem 1.25rem', borderRadius:'20px', border:'none', background:'var(--primary)', color:'#fff', fontFamily:'Inter, sans-serif', fontSize:'0.83rem', fontWeight:'700', cursor:'pointer', opacity: (!composeText.trim() && composeImages.length === 0) ? 0.45 : 1}}>Post</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Filter pills ── */}
+                    <div style={{display:'flex', gap:'0.45rem', flexWrap:'wrap', marginBottom:'1.25rem'}}>
+                        <button onClick={() => setActiveFilter('all')} style={{padding:'0.35rem 0.8rem', borderRadius:'20px', border: activeFilter === 'all' ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: activeFilter === 'all' ? 'rgba(14,165,233,0.08)' : 'var(--card-bg)', color: activeFilter === 'all' ? 'var(--primary)' : 'var(--text)', fontWeight: activeFilter === 'all' ? '700' : '500', fontSize:'0.8rem', cursor:'pointer', fontFamily:'Inter, sans-serif'}}>All</button>
+                        {TAGS.map(t => (
+                            <button key={t.value} onClick={() => setActiveFilter(t.value)} style={{padding:'0.35rem 0.8rem', borderRadius:'20px', border: activeFilter === t.value ? `2px solid ${t.color}` : '1.5px solid var(--border)', background: activeFilter === t.value ? `${t.color}12` : 'var(--card-bg)', color: activeFilter === t.value ? t.color : 'var(--text)', fontWeight: activeFilter === t.value ? '700' : '500', fontSize:'0.8rem', cursor:'pointer', fontFamily:'Inter, sans-serif'}}>
+                                {t.icon} {t.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* ── Posts feed ── */}
+                    {filtered.length === 0 && (
+                        <div style={{textAlign:'center', padding:'3rem 1rem', color:'var(--text-muted)'}}>
+                            <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>🌍</div>
+                            <p style={{fontSize:'0.95rem', fontWeight:'500'}}>No posts yet. Be the first to share!</p>
+                        </div>
+                    )}
+
+                    {filtered.map(post => {
+                        const tag = TAGS.find(t => t.value === post.tag);
+                        return (
+                            <PostCard key={post.id} post={post} tag={tag} timeAgo={timeAgo} userName={userName} onLike={() => toggleLike(post.id)} onComment={(text) => addComment(post.id, text)} onDelete={() => deletePost(post.id)} />
+                        );
+                    })}
+                </div>
+            );
+        }
+
+        function PostCard({ post, tag, timeAgo, userName, onLike, onComment, onDelete }) {
+            const [showComments, setShowComments] = React.useState(false);
+            const [commentText, setCommentText] = React.useState('');
+
+            const handleComment = (e) => {
+                e.preventDefault();
+                onComment(commentText);
+                setCommentText('');
+            };
+
+            return (
+                <div style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'14px', padding:'1.15rem', marginBottom:'1rem', boxShadow:'0 1px 4px rgba(0,0,0,0.04)'}}>
+                    {/* Post header */}
+                    <div style={{display:'flex', alignItems:'center', gap:'0.65rem', marginBottom:'0.85rem'}}>
+                        <div style={{width:'38px', height:'38px', borderRadius:'50%', background:post.color, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{post.initial}</div>
+                        <div style={{flex:1}}>
+                            <div style={{fontWeight:'700', fontSize:'0.9rem', color:'var(--text)'}}>{post.author}</div>
+                            <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                                <span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{timeAgo(post.timestamp)}</span>
+                                {tag && <span style={{fontSize:'0.68rem', fontWeight:'700', color:tag.color, background:`${tag.color}14`, padding:'2px 8px', borderRadius:'10px'}}>{tag.icon} {tag.label}</span>}
+                            </div>
+                        </div>
+                        {post.author === userName && (
+                            <button onClick={onDelete} title="Delete post" style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.1rem', padding:'0.25rem', lineHeight:1}}>×</button>
+                        )}
+                    </div>
+
+                    {/* Post body */}
+                    {post.text && <p style={{fontSize:'0.9rem', color:'var(--text)', lineHeight:'1.6', margin:'0 0 0.75rem', whiteSpace:'pre-wrap'}}>{post.text}</p>}
+
+                    {/* Post images */}
+                    {post.images && post.images.length > 0 && (
+                        <div style={{display:'grid', gridTemplateColumns: post.images.length === 1 ? '1fr' : 'repeat(2, 1fr)', gap:'0.4rem', borderRadius:'10px', overflow:'hidden', marginBottom:'0.85rem'}}>
+                            {post.images.map((img, i) => (
+                                <img key={i} src={img} alt="" style={{width:'100%', height: post.images.length === 1 ? '280px' : '160px', objectFit:'cover', cursor:'pointer'}} />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Action bar */}
+                    <div style={{display:'flex', alignItems:'center', gap:'1.25rem', paddingTop:'0.6rem', borderTop:'1px solid var(--border)'}}>
+                        <button onClick={onLike} style={{background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.35rem', fontFamily:'Inter, sans-serif', fontSize:'0.83rem', fontWeight:'600', color: post.liked ? '#EF4444' : 'var(--text-muted)', transition:'color 0.15s', padding:0}}>
+                            <span style={{fontSize:'1.05rem'}}>{post.liked ? '❤️' : '🤍'}</span>
+                            {post.likes > 0 && post.likes}
+                        </button>
+                        <button onClick={() => setShowComments(v => !v)} style={{background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.35rem', fontFamily:'Inter, sans-serif', fontSize:'0.83rem', fontWeight:'600', color:'var(--text-muted)', padding:0}}>
+                            <span style={{fontSize:'1rem'}}>💬</span>
+                            {post.comments.length > 0 && post.comments.length}
+                        </button>
+                    </div>
+
+                    {/* Comments */}
+                    {showComments && (
+                        <div style={{marginTop:'0.85rem', paddingTop:'0.75rem', borderTop:'1px solid var(--border)'}}>
+                            {post.comments.map((c, i) => (
+                                <div key={i} style={{display:'flex', gap:'0.5rem', marginBottom:'0.7rem'}}>
+                                    <div style={{width:'26px', height:'26px', borderRadius:'50%', background:c.color, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.7rem', flexShrink:0, marginTop:'2px'}}>{c.initial}</div>
+                                    <div>
+                                        <div style={{display:'flex', alignItems:'baseline', gap:'0.4rem'}}>
+                                            <span style={{fontWeight:'700', fontSize:'0.82rem', color:'var(--text)'}}>{c.author}</span>
+                                            <span style={{fontSize:'0.7rem', color:'var(--text-muted)'}}>{timeAgo(c.timestamp)}</span>
+                                        </div>
+                                        <p style={{fontSize:'0.84rem', color:'var(--text)', margin:'0.1rem 0 0', lineHeight:'1.5'}}>{c.text}</p>
+                                    </div>
+                                </div>
+                            ))}
+                            <form onSubmit={handleComment} style={{display:'flex', gap:'0.5rem', marginTop:'0.5rem'}}>
+                                <input type="text" value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="Write a comment…" style={{flex:1, padding:'0.5rem 0.85rem', borderRadius:'20px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.83rem', background:'var(--bg)', color:'var(--text)', outline:'none'}} />
+                                <button type="submit" disabled={!commentText.trim()} style={{padding:'0.5rem 0.85rem', borderRadius:'20px', border:'none', background:'var(--primary)', color:'#fff', fontFamily:'Inter, sans-serif', fontSize:'0.8rem', fontWeight:'700', cursor:'pointer', opacity: commentText.trim() ? 1 : 0.4}}>Reply</button>
+                            </form>
+                        </div>
+                    )}
                 </div>
             );
         }
