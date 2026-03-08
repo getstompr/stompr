@@ -1073,6 +1073,12 @@
                                     Bucket List & Visited
                                 </button>
                                 <button
+                                    className={`tab ${activeTab === 'expenses' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('expenses')}
+                                >
+                                    Budget & Expenses
+                                </button>
+                                <button
                                     className={`tab ${activeTab === 'profile' ? 'active' : ''}`}
                                     onClick={() => setActiveTab('profile')}
                                 >
@@ -1097,6 +1103,10 @@
                                 <AIAssistantView />
                             )}
 
+                            {activeTab === 'expenses' && (
+                                <ExpensesView />
+                            )}
+
                             {activeTab === 'profile' && (
                                 <ProfileView
                                     session={session}
@@ -1106,6 +1116,401 @@
                             )}
                         </div>
                     </div>
+                </div>
+            );
+        }
+
+        function ExpensesView() {
+            const [subTab, setSubTab] = React.useState('budget');
+            return (
+                <div>
+                    <div style={{marginBottom:'1.5rem'}}>
+                        <h2 style={{fontSize:'1.4rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.2rem'}}>Budget & Expenses</h2>
+                        <p style={{color:'var(--text-muted)', fontSize:'0.9rem', marginBottom:'1rem'}}>Plan your budget and track shared costs</p>
+                        <div className="country-subtabs">
+                            <button className={`country-subtab-btn ${subTab === 'budget' ? 'active' : ''}`} onClick={() => setSubTab('budget')}>💰 Budget</button>
+                            <button className={`country-subtab-btn ${subTab === 'split' ? 'active' : ''}`} onClick={() => setSubTab('split')}>🤝 Shared Expenses</button>
+                        </div>
+                    </div>
+                    {subTab === 'budget' && <BudgetSubView />}
+                    {subTab === 'split' && <SharedExpensesSubView />}
+                </div>
+            );
+        }
+
+        function BudgetSubView() {
+            const [expenses, setExpenses] = React.useState([]);
+            const [showForm, setShowForm] = React.useState(false);
+            const [totalBudget, setTotalBudget] = React.useState('');
+            const [currency, setCurrency] = React.useState('USD');
+            const [form, setForm] = React.useState({ description: '', amount: '', category: 'Food', date: new Date().toISOString().split('T')[0] });
+            const categories = ['Food', 'Transport', 'Accommodation', 'Activities', 'Shopping', 'Health', 'Other'];
+            const catColors = { Food: '#F59E0B', Transport: '#0EA5E9', Accommodation: '#8B5CF6', Activities: '#22C55E', Shopping: '#EC4899', Health: '#EF4444', Other: '#6B7280' };
+            const currencies = ['USD','EUR','GBP','JPY','AUD','CAD','CHF','CNY','INR','MXN','BRL','SGD','HKD','THB','TRY'];
+
+            const handleAdd = (e) => {
+                e.preventDefault();
+                if (!form.description.trim() || !form.amount) return;
+                setExpenses(prev => [...prev, { ...form, id: Date.now(), amount: parseFloat(form.amount) }]);
+                setForm({ description: '', amount: '', category: 'Food', date: new Date().toISOString().split('T')[0] });
+                setShowForm(false);
+            };
+
+            const total = expenses.reduce((s, e) => s + e.amount, 0);
+            const budget = parseFloat(totalBudget) || 0;
+            const remaining = budget - total;
+            const pct = budget > 0 ? Math.min(100, Math.round(total / budget * 100)) : 0;
+            const byCategory = categories.map(cat => ({ cat, amt: expenses.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0) })).filter(c => c.amt > 0);
+
+            return (
+                <div>
+                    <div className="category-block" style={{marginBottom:'1.25rem'}}>
+                        <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>Trip Budget</div>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:'0.75rem', alignItems:'end'}}>
+                            <div className="form-group" style={{margin:0}}>
+                                <label>Total Budget</label>
+                                <input type="number" min="0" step="0.01" value={totalBudget} onChange={e => setTotalBudget(e.target.value)} placeholder="e.g. 2000" />
+                            </div>
+                            <div className="form-group" style={{margin:0}}>
+                                <label>Currency</label>
+                                <select className="country-select" value={currency} onChange={e => setCurrency(e.target.value)} style={{width:'90px'}}>
+                                    {currencies.map(c => <option key={c}>{c}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        {budget > 0 && (
+                            <div style={{marginTop:'1rem'}}>
+                                <div style={{display:'flex', justifyContent:'space-between', marginBottom:'0.4rem'}}>
+                                    <span style={{fontSize:'0.82rem', color:'var(--text-muted)', fontWeight:'600'}}>{currency} {total.toFixed(2)} spent</span>
+                                    <span style={{fontSize:'0.82rem', fontWeight:'700', color: remaining >= 0 ? 'var(--success)' : 'var(--danger)'}}>
+                                        {remaining >= 0 ? `${currency} ${remaining.toFixed(2)} left` : `${currency} ${Math.abs(remaining).toFixed(2)} over`}
+                                    </span>
+                                </div>
+                                <div style={{height:'8px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
+                                    <div style={{height:'100%', width:`${pct}%`, background: pct < 80 ? 'var(--success)' : pct < 100 ? 'var(--accent)' : 'var(--danger)', borderRadius:'999px', transition:'width 0.4s ease'}}></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {byCategory.length > 0 && (
+                        <div className="category-block" style={{marginBottom:'1.25rem'}}>
+                            <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>Spending by Category</div>
+                            <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem'}}>
+                                {byCategory.map(({cat, amt}) => (
+                                    <div key={cat} style={{display:'flex', alignItems:'center', gap:'0.4rem', background:'#F7F7F7', borderRadius:'999px', padding:'0.3rem 0.75rem', fontSize:'0.82rem', fontWeight:'600'}}>
+                                        <div style={{width:'8px', height:'8px', borderRadius:'50%', background: catColors[cat], flexShrink:0}}></div>
+                                        {cat}: {currency} {amt.toFixed(2)}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+                        <span style={{fontWeight:'700', fontSize:'0.95rem'}}>Expenses ({expenses.length})</span>
+                        {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Log Expense</button>}
+                    </div>
+
+                    {showForm && (
+                        <div className="category-block" style={{marginBottom:'1.25rem'}}>
+                            <form onSubmit={handleAdd}>
+                                <div style={{display:'grid', gap:'0.75rem'}}>
+                                    <div className="form-group" style={{margin:0}}>
+                                        <label>Description</label>
+                                        <input type="text" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="e.g. Dinner, taxi, hotel" required />
+                                    </div>
+                                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+                                        <div className="form-group" style={{margin:0}}>
+                                            <label>Amount ({currency})</label>
+                                            <input type="number" min="0" step="0.01" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} placeholder="0.00" required />
+                                        </div>
+                                        <div className="form-group" style={{margin:0}}>
+                                            <label>Category</label>
+                                            <select className="country-select" value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
+                                                {categories.map(c => <option key={c}>{c}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="form-group" style={{margin:0}}>
+                                        <label>Date</label>
+                                        <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
+                                    </div>
+                                    <div style={{display:'flex', gap:'0.75rem'}}>
+                                        <button type="submit" className="btn btn-primary" style={{flex:1}}>Save</button>
+                                        <button type="button" className="btn" style={{flex:1}} onClick={() => setShowForm(false)}>Cancel</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {expenses.length === 0 && !showForm && (
+                        <div style={{textAlign:'center', padding:'2.5rem 1rem', color:'var(--text-muted)'}}>
+                            <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>💸</div>
+                            <p style={{fontWeight:'500'}}>No expenses logged yet.</p>
+                        </div>
+                    )}
+
+                    <div style={{display:'flex', flexDirection:'column', gap:'0.6rem'}}>
+                        {expenses.map(exp => (
+                            <div key={exp.id} style={{display:'flex', alignItems:'center', gap:'1rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.9rem 1.1rem'}}>
+                                <div style={{width:'10px', height:'10px', borderRadius:'50%', background: catColors[exp.category], flexShrink:0}}></div>
+                                <div style={{flex:1, minWidth:0}}>
+                                    <div style={{fontWeight:'600', fontSize:'0.92rem', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{exp.description}</div>
+                                    <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.1rem'}}>{exp.category} · {exp.date}</div>
+                                </div>
+                                <div style={{fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{currency} {exp.amount.toFixed(2)}</div>
+                                <button onClick={() => setExpenses(prev => prev.filter(e => e.id !== exp.id))} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.2rem', lineHeight:1, padding:'0 0.25rem'}}>×</button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        function SharedExpensesSubView() {
+            const [travelers, setTravelers] = React.useState([]);
+            const [logs, setLogs] = React.useState([]);
+            const [newName, setNewName] = React.useState('');
+            const [showLogForm, setShowLogForm] = React.useState(false);
+            const [currency, setCurrency] = React.useState('USD');
+            const [logForm, setLogForm] = React.useState({ description: '', amount: '', paidBy: '', splitAmong: [], date: new Date().toISOString().split('T')[0] });
+            const currencies = ['USD','EUR','GBP','JPY','AUD','CAD','CHF','CNY','INR','MXN','BRL','SGD','HKD','THB','TRY'];
+
+            const addTraveler = (e) => {
+                e.preventDefault();
+                const name = newName.trim();
+                if (!name || travelers.includes(name)) return;
+                setTravelers(prev => [...prev, name]);
+                setNewName('');
+            };
+
+            const removeTraveler = (name) => {
+                setTravelers(prev => prev.filter(t => t !== name));
+                setLogs(prev => prev.filter(l => l.paidBy !== name));
+            };
+
+            const toggleSplit = (name) => {
+                setLogForm(prev => ({
+                    ...prev,
+                    splitAmong: prev.splitAmong.includes(name)
+                        ? prev.splitAmong.filter(n => n !== name)
+                        : [...prev.splitAmong, name]
+                }));
+            };
+
+            const handleLogSubmit = (e) => {
+                e.preventDefault();
+                if (!logForm.description.trim() || !logForm.amount || !logForm.paidBy || logForm.splitAmong.length === 0) return;
+                setLogs(prev => [...prev, { ...logForm, id: Date.now(), amount: parseFloat(logForm.amount) }]);
+                setLogForm({ description: '', amount: '', paidBy: '', splitAmong: [], date: new Date().toISOString().split('T')[0] });
+                setShowLogForm(false);
+            };
+
+            const balances = React.useMemo(() => {
+                const b = {};
+                travelers.forEach(t => b[t] = 0);
+                logs.forEach(log => {
+                    const share = log.amount / log.splitAmong.length;
+                    b[log.paidBy] = (b[log.paidBy] || 0) + log.amount;
+                    log.splitAmong.forEach(p => { b[p] = (b[p] || 0) - share; });
+                });
+                return b;
+            }, [travelers, logs]);
+
+            const settlements = React.useMemo(() => {
+                const result = [];
+                const pos = Object.entries(balances).filter(([,v]) => v > 0.005).map(([n,v]) => [n, v]).sort((a,b) => b[1]-a[1]);
+                const neg = Object.entries(balances).filter(([,v]) => v < -0.005).map(([n,v]) => [n, -v]).sort((a,b) => b[1]-a[1]);
+                let pi = 0, ni = 0;
+                while (pi < pos.length && ni < neg.length) {
+                    const amt = Math.min(pos[pi][1], neg[ni][1]);
+                    result.push({ from: neg[ni][0], to: pos[pi][0], amount: amt });
+                    pos[pi][1] -= amt;
+                    neg[ni][1] -= amt;
+                    if (pos[pi][1] < 0.005) pi++;
+                    if (neg[ni][1] < 0.005) ni++;
+                }
+                return result;
+            }, [balances]);
+
+            const totalSpent = logs.reduce((s, l) => s + l.amount, 0);
+            const avatarColors = ['#0EA5E9','#F59E0B','#22C55E','#EC4899','#8B5CF6','#EF4444','#6B7280','#F97316'];
+
+            return (
+                <div>
+                    {/* Travelers */}
+                    <div className="category-block" style={{marginBottom:'1.25rem'}}>
+                        <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>Travelers in this trip</div>
+                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem', marginBottom:'0.75rem'}}>
+                            {travelers.map((t, i) => (
+                                <div key={t} style={{display:'flex', alignItems:'center', gap:'0.4rem', background: avatarColors[i % avatarColors.length] + '18', border:`1.5px solid ${avatarColors[i % avatarColors.length]}40`, borderRadius:'999px', padding:'0.3rem 0.75rem'}}>
+                                    <div style={{width:'22px', height:'22px', borderRadius:'50%', background: avatarColors[i % avatarColors.length], display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'0.7rem', fontWeight:'700'}}>{t[0].toUpperCase()}</div>
+                                    <span style={{fontSize:'0.85rem', fontWeight:'600'}}>{t}</span>
+                                    <button onClick={() => removeTraveler(t)} style={{background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', fontSize:'1rem', lineHeight:1, padding:'0 0.1rem'}}>×</button>
+                                </div>
+                            ))}
+                        </div>
+                        <form onSubmit={addTraveler} style={{display:'flex', gap:'0.5rem'}}>
+                            <input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Add traveler name" style={{flex:1, padding:'0.5rem 0.75rem', border:'1.5px solid var(--border)', borderRadius:'var(--radius-sm)', fontFamily:'Inter, sans-serif', fontSize:'0.9rem'}} />
+                            <button type="submit" className="btn btn-primary" style={{padding:'0.5rem 1rem'}}>Add</button>
+                        </form>
+                    </div>
+
+                    {travelers.length >= 2 && (
+                        <>
+                            {/* Summary bar */}
+                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem', marginBottom:'1.25rem'}}>
+                                <div style={{background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'1rem', textAlign:'center'}}>
+                                    <div style={{fontSize:'0.78rem', color:'var(--text-muted)', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.3rem'}}>Total Logged</div>
+                                    <div style={{fontSize:'1.3rem', fontWeight:'800', color:'var(--text)'}}>{currency} {totalSpent.toFixed(2)}</div>
+                                </div>
+                                <div style={{background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'1rem', textAlign:'center'}}>
+                                    <div style={{fontSize:'0.78rem', color:'var(--text-muted)', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.3rem'}}>Per Person (avg)</div>
+                                    <div style={{fontSize:'1.3rem', fontWeight:'800', color:'var(--primary)'}}>{currency} {travelers.length > 0 ? (totalSpent / travelers.length).toFixed(2) : '0.00'}</div>
+                                </div>
+                            </div>
+
+                            {/* Currency + Add button */}
+                            <div style={{display:'flex', gap:'0.75rem', alignItems:'center', marginBottom:'1.25rem'}}>
+                                <select className="country-select" value={currency} onChange={e => setCurrency(e.target.value)} style={{width:'100px', flex:'none'}}>
+                                    {currencies.map(c => <option key={c}>{c}</option>)}
+                                </select>
+                                {!showLogForm && <button className="btn btn-primary" style={{flex:1}} onClick={() => { setLogForm(f => ({...f, splitAmong: [...travelers]})); setShowLogForm(true); }}>+ Log Shared Expense</button>}
+                            </div>
+
+                            {/* Log form */}
+                            {showLogForm && (
+                                <div className="category-block" style={{marginBottom:'1.25rem'}}>
+                                    <div style={{fontWeight:'700', marginBottom:'1rem'}}>New Shared Expense</div>
+                                    <form onSubmit={handleLogSubmit}>
+                                        <div style={{display:'grid', gap:'0.75rem'}}>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label>What was it?</label>
+                                                <input type="text" value={logForm.description} onChange={e => setLogForm({...logForm, description: e.target.value})} placeholder="e.g. Hotel room, group dinner" required />
+                                            </div>
+                                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+                                                <div className="form-group" style={{margin:0}}>
+                                                    <label>Amount ({currency})</label>
+                                                    <input type="number" min="0" step="0.01" value={logForm.amount} onChange={e => setLogForm({...logForm, amount: e.target.value})} placeholder="0.00" required />
+                                                </div>
+                                                <div className="form-group" style={{margin:0}}>
+                                                    <label>Date</label>
+                                                    <input type="date" value={logForm.date} onChange={e => setLogForm({...logForm, date: e.target.value})} />
+                                                </div>
+                                            </div>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label>Paid by</label>
+                                                <select className="country-select" value={logForm.paidBy} onChange={e => setLogForm({...logForm, paidBy: e.target.value})} required>
+                                                    <option value="">-- Select --</option>
+                                                    {travelers.map(t => <option key={t}>{t}</option>)}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style={{display:'block', fontSize:'0.85rem', fontWeight:'600', color:'var(--text)', marginBottom:'0.5rem'}}>Split between</label>
+                                                <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem'}}>
+                                                    {travelers.map(t => (
+                                                        <button key={t} type="button"
+                                                            onClick={() => toggleSplit(t)}
+                                                            style={{
+                                                                padding:'0.35rem 0.85rem',
+                                                                borderRadius:'999px',
+                                                                border:`1.5px solid ${logForm.splitAmong.includes(t) ? 'var(--primary)' : 'var(--border)'}`,
+                                                                background: logForm.splitAmong.includes(t) ? '#EFF6FF' : 'transparent',
+                                                                color: logForm.splitAmong.includes(t) ? 'var(--primary)' : 'var(--text-muted)',
+                                                                fontWeight:'600', fontSize:'0.85rem', cursor:'pointer', fontFamily:'Inter, sans-serif'
+                                                            }}
+                                                        >{t}</button>
+                                                    ))}
+                                                </div>
+                                                {logForm.splitAmong.length > 0 && logForm.amount && (
+                                                    <div style={{marginTop:'0.5rem', fontSize:'0.8rem', color:'var(--text-muted)'}}>
+                                                        {currency} {(parseFloat(logForm.amount || 0) / logForm.splitAmong.length).toFixed(2)} each
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div style={{display:'flex', gap:'0.75rem'}}>
+                                                <button type="submit" className="btn btn-primary" style={{flex:1}}>Save</button>
+                                                <button type="button" className="btn" style={{flex:1}} onClick={() => setShowLogForm(false)}>Cancel</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
+
+                            {/* Balances */}
+                            {logs.length > 0 && (
+                                <>
+                                    <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>Balances</div>
+                                    <div style={{display:'grid', gap:'0.5rem', marginBottom:'1.25rem'}}>
+                                        {travelers.map((t, i) => {
+                                            const bal = balances[t] || 0;
+                                            return (
+                                                <div key={t} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.8rem 1rem'}}>
+                                                    <div style={{width:'32px', height:'32px', borderRadius:'50%', background: avatarColors[i % avatarColors.length], display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'0.8rem', fontWeight:'700', flexShrink:0}}>{t[0].toUpperCase()}</div>
+                                                    <span style={{flex:1, fontWeight:'600', fontSize:'0.92rem'}}>{t}</span>
+                                                    <span style={{fontWeight:'700', fontSize:'0.95rem', color: bal > 0.01 ? 'var(--success)' : bal < -0.01 ? 'var(--danger)' : 'var(--text-muted)'}}>
+                                                        {bal > 0.01 ? `+${currency} ${bal.toFixed(2)}` : bal < -0.01 ? `-${currency} ${Math.abs(bal).toFixed(2)}` : 'Settled'}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Settlements */}
+                                    {settlements.length > 0 && (
+                                        <>
+                                            <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>How to settle up</div>
+                                            <div style={{display:'grid', gap:'0.5rem', marginBottom:'1.25rem'}}>
+                                                {settlements.map((s, i) => (
+                                                    <div key={i} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'#F0FDF4', border:'1.5px solid #BBF7D0', borderRadius:'var(--radius-sm)', padding:'0.8rem 1rem'}}>
+                                                        <span style={{fontWeight:'700', fontSize:'0.9rem', color:'#166534'}}>{s.from}</span>
+                                                        <span style={{color:'var(--text-muted)', fontSize:'0.85rem', flex:1}}>→ pays</span>
+                                                        <span style={{fontWeight:'700', fontSize:'0.9rem', color:'#166534'}}>{s.to}</span>
+                                                        <span style={{fontWeight:'800', fontSize:'0.95rem', color:'var(--success)', marginLeft:'auto'}}>{currency} {s.amount.toFixed(2)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* Expense log */}
+                                    <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>Expense Log</div>
+                                    <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+                                        {logs.map(log => (
+                                            <div key={log.id} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.8rem 1rem'}}>
+                                                <div style={{flex:1, minWidth:0}}>
+                                                    <div style={{fontWeight:'600', fontSize:'0.92rem'}}>{log.description}</div>
+                                                    <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.15rem'}}>
+                                                        Paid by <strong>{log.paidBy}</strong> · Split {log.splitAmong.length} ways · {log.date}
+                                                    </div>
+                                                </div>
+                                                <div style={{fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{currency} {log.amount.toFixed(2)}</div>
+                                                <button onClick={() => setLogs(prev => prev.filter(l => l.id !== log.id))} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.2rem', lineHeight:1}}>×</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+
+                            {logs.length === 0 && !showLogForm && (
+                                <div style={{textAlign:'center', padding:'2.5rem 1rem', color:'var(--text-muted)'}}>
+                                    <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>🤝</div>
+                                    <p style={{fontWeight:'500'}}>No shared expenses yet.</p>
+                                    <p style={{fontSize:'0.875rem', marginTop:'0.4rem'}}>Log your first shared cost above.</p>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {travelers.length < 2 && (
+                        <div style={{textAlign:'center', padding:'2.5rem 1rem', color:'var(--text-muted)'}}>
+                            <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>👥</div>
+                            <p style={{fontWeight:'500'}}>Add at least 2 travelers to get started.</p>
+                            <p style={{fontSize:'0.875rem', marginTop:'0.4rem'}}>Everyone who's sharing costs on this trip.</p>
+                        </div>
+                    )}
                 </div>
             );
         }
