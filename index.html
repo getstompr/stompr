@@ -957,6 +957,7 @@
             const [activeTab, setActiveTab] = useState('ai');
             const [places, setPlaces] = useState([]);
             const [profile, setProfile] = useState(null);
+            const [profilePic, setProfilePic] = useState('');
 
             useEffect(() => {
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
@@ -973,9 +974,11 @@
                 if (session) {
                     loadPlaces();
                     loadProfile();
+                    try { setProfilePic(localStorage.getItem('stompr_avatar_' + session.user.id) || ''); } catch {}
                 } else {
                     setPlaces([]);
                     setProfile(null);
+                    setProfilePic('');
                 }
             }, [session]);
 
@@ -1374,8 +1377,12 @@
                                         className="profile-avatar"
                                         onClick={() => setProfileOpen(v => !v)}
                                         title="Account"
+                                        style={profilePic ? {padding:0, overflow:'hidden'} : {}}
                                     >
-                                        {(profile?.full_name || session.user.email || '?')[0].toUpperCase()}
+                                        {profilePic
+                                            ? <img src={profilePic} alt="Avatar" style={{width:'100%', height:'100%', objectFit:'cover', borderRadius:'50%'}} />
+                                            : (profile?.full_name || session.user.email || '?')[0].toUpperCase()
+                                        }
                                     </div>
                                     {profileOpen && (
                                         <div className="profile-dropdown">
@@ -1460,7 +1467,7 @@
                             )}
 
                             {activeTab === 'community' && (
-                                <CommunityView session={session} profile={profile} />
+                                <CommunityView session={session} profile={profile} profilePic={profilePic} />
                             )}
 
                             {activeTab === 'profile' && (
@@ -1473,6 +1480,8 @@
                                         session={session}
                                         profile={profile}
                                         onProfileUpdate={setProfile}
+                                        profilePic={profilePic}
+                                        onProfilePicChange={setProfilePic}
                                     />
                                 </div>
                             )}
@@ -2064,7 +2073,7 @@
             );
         }
 
-        function ProfileView({ session, profile, onProfileUpdate }) {
+        function ProfileView({ session, profile, onProfileUpdate, profilePic, onProfilePicChange }) {
             const [form, setForm] = useState({
                 full_name: profile?.full_name || '',
                 username: profile?.username || '',
@@ -2075,6 +2084,29 @@
             });
             const [saving, setSaving] = useState(false);
             const [message, setMessage] = useState('');
+            const fileRef = React.useRef(null);
+
+            const PIC_KEY = 'stompr_avatar_' + session.user.id;
+
+            const handlePicUpload = (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 2 * 1024 * 1024) { setMessage('Image must be under 2 MB'); return; }
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const dataUrl = reader.result;
+                    localStorage.setItem(PIC_KEY, dataUrl);
+                    onProfilePicChange(dataUrl);
+                    setMessage('Profile picture updated!');
+                };
+                reader.readAsDataURL(file);
+            };
+
+            const removePic = () => {
+                localStorage.removeItem(PIC_KEY);
+                onProfilePicChange('');
+                setMessage('Profile picture removed.');
+            };
 
             const togglePref = (pref) => {
                 setForm(f => ({
@@ -2106,6 +2138,32 @@
             return (
                 <div style={{maxWidth: '600px', margin: '0 auto'}}>
                     <h2 style={{marginBottom: '1.5rem', fontSize: '1.4rem', fontWeight: 600}}>Your Profile</h2>
+
+                    {/* Profile Picture */}
+                    <div style={{display:'flex', alignItems:'center', gap:'1.25rem', marginBottom:'2rem'}}>
+                        <div style={{width:'80px', height:'80px', borderRadius:'50%', background:'linear-gradient(135deg, var(--primary), var(--primary-dark))', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:'1.8rem', fontWeight:'700', overflow:'hidden', flexShrink:0, border:'3px solid var(--border)'}}>
+                            {profilePic
+                                ? <img src={profilePic} alt="Avatar" style={{width:'100%', height:'100%', objectFit:'cover'}} />
+                                : (profile?.full_name || session.user.email || '?')[0].toUpperCase()
+                            }
+                        </div>
+                        <div>
+                            <div style={{fontWeight:'600', fontSize:'0.95rem', marginBottom:'0.5rem', color:'var(--text)'}}>Profile Picture</div>
+                            <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap'}}>
+                                <button type="button" onClick={() => fileRef.current?.click()} style={{padding:'0.4rem 0.85rem', borderRadius:'8px', border:'1.5px solid var(--primary)', background:'transparent', color:'var(--primary)', fontFamily:'Inter, sans-serif', fontSize:'0.82rem', fontWeight:'600', cursor:'pointer'}}>
+                                    {profilePic ? 'Change Photo' : 'Upload Photo'}
+                                </button>
+                                {profilePic && (
+                                    <button type="button" onClick={removePic} style={{padding:'0.4rem 0.85rem', borderRadius:'8px', border:'1.5px solid var(--danger, #EF4444)', background:'transparent', color:'var(--danger, #EF4444)', fontFamily:'Inter, sans-serif', fontSize:'0.82rem', fontWeight:'600', cursor:'pointer'}}>
+                                        Remove
+                                    </button>
+                                )}
+                            </div>
+                            <input ref={fileRef} type="file" accept="image/*" onChange={handlePicUpload} style={{display:'none'}} />
+                            <p style={{fontSize:'0.73rem', color:'var(--text-muted)', marginTop:'0.35rem'}}>JPG, PNG or GIF. Max 2 MB.</p>
+                        </div>
+                    </div>
+
                     <form onSubmit={handleSave}>
                         <div className="form-group">
                             <label>Full Name</label>
@@ -2152,18 +2210,28 @@
             );
         }
 
-        function CommunityView({ session, profile }) {
+        function CommunityView({ session, profile, profilePic }) {
             const { useState, useEffect, useRef } = React;
             const POSTS_KEY = 'stompr_community_posts';
+            const FRIENDS_KEY = 'stompr_friends_' + session?.user?.id;
             const [posts, setPosts] = useState(() => { try { return JSON.parse(localStorage.getItem(POSTS_KEY)) || []; } catch { return []; } });
             const [showCompose, setShowCompose] = useState(false);
             const [composeText, setComposeText] = useState('');
             const [composeTag, setComposeTag] = useState('itinerary');
             const [composeImages, setComposeImages] = useState([]);
             const [activeFilter, setActiveFilter] = useState('all');
+            const [communityTab, setCommunityTab] = useState('feed'); // 'feed' | 'friends'
+            const [friends, setFriends] = useState(() => { try { return JSON.parse(localStorage.getItem(FRIENDS_KEY)) || []; } catch { return []; } });
+            const [searchQuery, setSearchQuery] = useState('');
+            const [searchResults, setSearchResults] = useState([]);
+            const [searching, setSearching] = useState(false);
+            const [friendRequests, setFriendRequests] = useState(() => { try { return JSON.parse(localStorage.getItem(FRIENDS_KEY + '_requests')) || []; } catch { return []; } });
             const fileRef = useRef(null);
+            const searchDebounce = useRef(null);
 
             useEffect(() => { localStorage.setItem(POSTS_KEY, JSON.stringify(posts)); }, [posts]);
+            useEffect(() => { localStorage.setItem(FRIENDS_KEY, JSON.stringify(friends)); }, [friends]);
+            useEffect(() => { localStorage.setItem(FRIENDS_KEY + '_requests', JSON.stringify(friendRequests)); }, [friendRequests]);
 
             const userName = profile?.full_name || session?.user?.email?.split('@')[0] || 'Traveler';
             const userInitial = userName[0].toUpperCase();
@@ -2195,6 +2263,7 @@
                     author: userName,
                     initial: userInitial,
                     color: myColor,
+                    avatar: profilePic || '',
                     text: composeText.trim(),
                     tag: composeTag,
                     images: composeImages,
@@ -2215,7 +2284,7 @@
 
             const addComment = (id, text) => {
                 if (!text.trim()) return;
-                setPosts(prev => prev.map(p => p.id === id ? { ...p, comments: [...p.comments, { author: userName, initial: userInitial, color: myColor, text: text.trim(), timestamp: new Date().toISOString() }] } : p));
+                setPosts(prev => prev.map(p => p.id === id ? { ...p, comments: [...p.comments, { author: userName, initial: userInitial, color: myColor, avatar: profilePic || '', text: text.trim(), timestamp: new Date().toISOString() }] } : p));
             };
 
             const deletePost = (id) => {
@@ -2233,26 +2302,148 @@
                 return days + 'd ago';
             };
 
+            // ── Friends logic ──
+            const friendIds = friends.map(f => f.id);
+
+            const searchUsers = (query) => {
+                setSearchQuery(query);
+                clearTimeout(searchDebounce.current);
+                if (query.length < 2) { setSearchResults([]); return; }
+                searchDebounce.current = setTimeout(async () => {
+                    setSearching(true);
+                    try {
+                        const { data } = await supabaseClient
+                            .from('profiles')
+                            .select('id, full_name, username')
+                            .or(`full_name.ilike.%${query}%,username.ilike.%${query}%`)
+                            .neq('id', session.user.id)
+                            .limit(10);
+                        setSearchResults(data || []);
+                    } catch { setSearchResults([]); }
+                    setSearching(false);
+                }, 400);
+            };
+
+            const addFriend = (user) => {
+                if (friendIds.includes(user.id)) return;
+                const initial = (user.full_name || user.username || '?')[0].toUpperCase();
+                const color = avatarColors[(user.full_name || '').length % avatarColors.length];
+                setFriends(prev => [...prev, { id: user.id, name: user.full_name || user.username, username: user.username, initial, color, addedAt: new Date().toISOString() }]);
+            };
+
+            const removeFriend = (id) => {
+                setFriends(prev => prev.filter(f => f.id !== id));
+            };
+
             const filtered = activeFilter === 'all' ? posts : posts.filter(p => p.tag === activeFilter);
 
             return (
                 <div style={{maxWidth:'620px', margin:'0 auto'}}>
                     <h2 style={{fontSize:'1.3rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.2rem'}}>Community</h2>
-                    <p style={{color:'var(--text-muted)', fontSize:'0.88rem', marginBottom:'1.25rem'}}>Share itineraries, travel photos, tips, and deals with fellow travelers.</p>
+                    <p style={{color:'var(--text-muted)', fontSize:'0.88rem', marginBottom:'1rem'}}>Share itineraries, travel photos, tips, and deals with fellow travelers.</p>
 
+                    {/* ── Sub tabs: Feed / Friends ── */}
+                    <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.25rem'}}>
+                        <button onClick={() => setCommunityTab('feed')} style={{padding:'0.5rem 1.25rem', borderRadius:'24px', border: communityTab === 'feed' ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: communityTab === 'feed' ? 'rgba(14,165,233,0.08)' : 'var(--card-bg)', color: communityTab === 'feed' ? 'var(--primary)' : 'var(--text)', fontWeight:'700', fontSize:'0.88rem', cursor:'pointer', fontFamily:'Inter, sans-serif'}}>
+                            📰 Feed
+                        </button>
+                        <button onClick={() => setCommunityTab('friends')} style={{padding:'0.5rem 1.25rem', borderRadius:'24px', border: communityTab === 'friends' ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: communityTab === 'friends' ? 'rgba(14,165,233,0.08)' : 'var(--card-bg)', color: communityTab === 'friends' ? 'var(--primary)' : 'var(--text)', fontWeight:'700', fontSize:'0.88rem', cursor:'pointer', fontFamily:'Inter, sans-serif', display:'flex', alignItems:'center', gap:'0.4rem'}}>
+                            👥 Friends {friends.length > 0 && <span style={{background:'var(--primary)', color:'#fff', fontSize:'0.7rem', fontWeight:'700', padding:'1px 7px', borderRadius:'10px'}}>{friends.length}</span>}
+                        </button>
+                    </div>
+
+                    {/* ── Friends tab ── */}
+                    {communityTab === 'friends' && (
+                        <div>
+                            {/* Search bar */}
+                            <div style={{marginBottom:'1.5rem'}}>
+                                <div style={{position:'relative'}}>
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={e => searchUsers(e.target.value)}
+                                        placeholder="Search by name or username…"
+                                        style={{width:'100%', padding:'0.7rem 1rem 0.7rem 2.5rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.9rem', background:'var(--card-bg)', color:'var(--text)', outline:'none', boxSizing:'border-box'}}
+                                    />
+                                    <span style={{position:'absolute', left:'0.9rem', top:'50%', transform:'translateY(-50%)', fontSize:'1rem', pointerEvents:'none'}}>🔍</span>
+                                </div>
+
+                                {/* Search results */}
+                                {searchQuery.length >= 2 && (
+                                    <div style={{marginTop:'0.6rem', background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'12px', overflow:'hidden', boxShadow:'0 4px 16px rgba(0,0,0,0.08)'}}>
+                                        {searching && <div style={{padding:'1rem', textAlign:'center', color:'var(--text-muted)', fontSize:'0.85rem'}}>Searching…</div>}
+                                        {!searching && searchResults.length === 0 && <div style={{padding:'1rem', textAlign:'center', color:'var(--text-muted)', fontSize:'0.85rem'}}>No users found</div>}
+                                        {!searching && searchResults.map(u => {
+                                            const isFriend = friendIds.includes(u.id);
+                                            const uInitial = (u.full_name || u.username || '?')[0].toUpperCase();
+                                            const uColor = avatarColors[(u.full_name || '').length % avatarColors.length];
+                                            return (
+                                                <div key={u.id} style={{display:'flex', alignItems:'center', gap:'0.7rem', padding:'0.75rem 1rem', borderBottom:'1px solid var(--border)'}}>
+                                                    <div style={{width:'36px', height:'36px', borderRadius:'50%', background:uColor, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.9rem', flexShrink:0}}>{uInitial}</div>
+                                                    <div style={{flex:1, minWidth:0}}>
+                                                        <div style={{fontWeight:'700', fontSize:'0.9rem', color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{u.full_name || 'Traveler'}</div>
+                                                        {u.username && <div style={{fontSize:'0.78rem', color:'var(--text-muted)'}}>@{u.username}</div>}
+                                                    </div>
+                                                    {isFriend ? (
+                                                        <span style={{fontSize:'0.78rem', fontWeight:'700', color:'#22c55e', background:'rgba(34,197,94,0.1)', padding:'0.3rem 0.8rem', borderRadius:'20px'}}>✓ Friends</span>
+                                                    ) : (
+                                                        <button onClick={() => addFriend(u)} style={{padding:'0.35rem 0.9rem', borderRadius:'20px', border:'none', background:'var(--primary)', color:'#fff', fontFamily:'Inter, sans-serif', fontSize:'0.8rem', fontWeight:'700', cursor:'pointer'}}>+ Add</button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Friends list */}
+                            <div>
+                                <h3 style={{fontSize:'1rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.75rem'}}>My Friends ({friends.length})</h3>
+                                {friends.length === 0 && (
+                                    <div style={{textAlign:'center', padding:'2.5rem 1rem', color:'var(--text-muted)'}}>
+                                        <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>👥</div>
+                                        <p style={{fontSize:'0.9rem', fontWeight:'500'}}>No friends yet. Search above to find fellow travelers!</p>
+                                    </div>
+                                )}
+                                <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+                                    {friends.map(f => (
+                                        <div key={f.id} style={{display:'flex', alignItems:'center', gap:'0.7rem', padding:'0.75rem 1rem', background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'12px'}}>
+                                            <div style={{width:'40px', height:'40px', borderRadius:'50%', background:f.color, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'1rem', flexShrink:0}}>{f.initial}</div>
+                                            <div style={{flex:1, minWidth:0}}>
+                                                <div style={{fontWeight:'700', fontSize:'0.92rem', color:'var(--text)'}}>{f.name}</div>
+                                                {f.username && <div style={{fontSize:'0.78rem', color:'var(--text-muted)'}}>@{f.username}</div>}
+                                            </div>
+                                            <button onClick={() => removeFriend(f.id)} style={{padding:'0.35rem 0.8rem', borderRadius:'20px', border:'1.5px solid #fca5a5', background:'none', color:'#ef4444', fontFamily:'Inter, sans-serif', fontSize:'0.78rem', fontWeight:'700', cursor:'pointer'}}>
+                                                Remove
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Feed tab ── */}
+                    {communityTab === 'feed' && <>
                     {/* ── Compose ── */}
                     {!showCompose ? (
                         <div onClick={() => setShowCompose(true)} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'14px', padding:'0.85rem 1rem', cursor:'pointer', marginBottom:'1.5rem', transition:'box-shadow 0.15s'}}
                             onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'}
                             onMouseLeave={e => e.currentTarget.style.boxShadow='none'}
                         >
-                            <div style={{width:'36px', height:'36px', borderRadius:'50%', background:myColor, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{userInitial}</div>
+                            {profilePic
+                                ? <img src={profilePic} alt="" style={{width:'36px', height:'36px', borderRadius:'50%', objectFit:'cover', flexShrink:0}} />
+                                : <div style={{width:'36px', height:'36px', borderRadius:'50%', background:myColor, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{userInitial}</div>
+                            }
                             <span style={{color:'var(--text-muted)', fontSize:'0.9rem'}}>Share something with the community…</span>
                         </div>
                     ) : (
                         <div style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'14px', padding:'1.25rem', marginBottom:'1.5rem', boxShadow:'0 4px 16px rgba(0,0,0,0.08)'}}>
                             <div style={{display:'flex', alignItems:'center', gap:'0.6rem', marginBottom:'1rem'}}>
-                                <div style={{width:'36px', height:'36px', borderRadius:'50%', background:myColor, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{userInitial}</div>
+                                {profilePic
+                                    ? <img src={profilePic} alt="" style={{width:'36px', height:'36px', borderRadius:'50%', objectFit:'cover', flexShrink:0}} />
+                                    : <div style={{width:'36px', height:'36px', borderRadius:'50%', background:myColor, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{userInitial}</div>
+                                }
                                 <div style={{fontWeight:'700', fontSize:'0.92rem', color:'var(--text)'}}>{userName}</div>
                             </div>
                             <textarea
@@ -2320,6 +2511,7 @@
                             <PostCard key={post.id} post={post} tag={tag} timeAgo={timeAgo} userName={userName} onLike={() => toggleLike(post.id)} onComment={(text) => addComment(post.id, text)} onDelete={() => deletePost(post.id)} />
                         );
                     })}
+                    </>}
                 </div>
             );
         }
@@ -2338,7 +2530,10 @@
                 <div style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'14px', padding:'1.15rem', marginBottom:'1rem', boxShadow:'0 1px 4px rgba(0,0,0,0.04)'}}>
                     {/* Post header */}
                     <div style={{display:'flex', alignItems:'center', gap:'0.65rem', marginBottom:'0.85rem'}}>
-                        <div style={{width:'38px', height:'38px', borderRadius:'50%', background:post.color, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{post.initial}</div>
+                        {post.avatar
+                            ? <img src={post.avatar} alt="" style={{width:'38px', height:'38px', borderRadius:'50%', objectFit:'cover', flexShrink:0}} />
+                            : <div style={{width:'38px', height:'38px', borderRadius:'50%', background:post.color, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{post.initial}</div>
+                        }
                         <div style={{flex:1}}>
                             <div style={{fontWeight:'700', fontSize:'0.9rem', color:'var(--text)'}}>{post.author}</div>
                             <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
@@ -2380,7 +2575,10 @@
                         <div style={{marginTop:'0.85rem', paddingTop:'0.75rem', borderTop:'1px solid var(--border)'}}>
                             {post.comments.map((c, i) => (
                                 <div key={i} style={{display:'flex', gap:'0.5rem', marginBottom:'0.7rem'}}>
-                                    <div style={{width:'26px', height:'26px', borderRadius:'50%', background:c.color, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.7rem', flexShrink:0, marginTop:'2px'}}>{c.initial}</div>
+                                    {c.avatar
+                                        ? <img src={c.avatar} alt="" style={{width:'26px', height:'26px', borderRadius:'50%', objectFit:'cover', flexShrink:0, marginTop:'2px'}} />
+                                        : <div style={{width:'26px', height:'26px', borderRadius:'50%', background:c.color, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'700', fontSize:'0.7rem', flexShrink:0, marginTop:'2px'}}>{c.initial}</div>
+                                    }
                                     <div>
                                         <div style={{display:'flex', alignItems:'baseline', gap:'0.4rem'}}>
                                             <span style={{fontWeight:'700', fontSize:'0.82rem', color:'var(--text)'}}>{c.author}</span>
