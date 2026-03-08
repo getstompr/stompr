@@ -1656,7 +1656,7 @@
                     <div className="main-content">
                         <div className="dashboard">
                             <div className="dashboard-header">
-                                <h1>Your Travel Hub</h1>
+                                <h1>{profile?.full_name ? profile.full_name.split(' ')[0] + ', welcome to your travel hub' : 'Your Travel Hub'}</h1>
                                 <p>Plan, track, and dream about your next adventure.</p>
                             </div>
 
@@ -1754,8 +1754,10 @@
                             <button className={`country-subtab-btn ${subTab === 'split' ? 'active' : ''}`} onClick={() => setSubTab('split')}>🤝 Shared Expenses</button>
                         </div>
                     </div>
+                    <div key={subTab} className="tab-content-enter">
                     {subTab === 'budget' && <BudgetSubView />}
                     {subTab === 'split' && <SharedExpensesSubView />}
+                    </div>
                 </div>
             );
         }
@@ -1840,7 +1842,7 @@
                     </div>
 
                     {showForm && (
-                        <div className="category-block" style={{marginBottom:'1.25rem'}}>
+                        <div className="category-block tab-content-enter" style={{marginBottom:'1.25rem'}}>
                             <form onSubmit={handleAdd}>
                                 <div style={{display:'grid', gap:'0.75rem'}}>
                                     <div className="form-group" style={{margin:0}}>
@@ -1881,7 +1883,7 @@
 
                     <div style={{display:'flex', flexDirection:'column', gap:'0.6rem'}}>
                         {expenses.map(exp => (
-                            <div key={exp.id} style={{display:'flex', alignItems:'center', gap:'1rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.9rem 1.1rem'}}>
+                            <div key={exp.id} className="tab-content-enter" style={{display:'flex', alignItems:'center', gap:'1rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.9rem 1.1rem', transition:'all 0.2s ease'}}>
                                 <div style={{width:'10px', height:'10px', borderRadius:'50%', background: catColors[exp.category], flexShrink:0}}></div>
                                 <div style={{flex:1, minWidth:0}}>
                                     <div style={{fontWeight:'600', fontSize:'0.92rem', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{exp.description}</div>
@@ -2094,7 +2096,7 @@
                                     {showHandles ? 'Hide' : '💳 Set Venmo & Zelle handles'}
                                 </button>
                                 {showHandles && (
-                                    <div style={{marginTop:'0.75rem', display:'grid', gap:'0.75rem'}}>
+                                    <div className="tab-content-enter" style={{marginTop:'0.75rem', display:'grid', gap:'0.75rem'}}>
                                         {travelers.map(t => (
                                             <div key={t} style={{display:'grid', gap:'0.4rem'}}>
                                                 <div style={{fontSize:'0.8rem', fontWeight:'700', color:'var(--text)'}}>{t}</div>
@@ -2145,7 +2147,7 @@
 
                             {/* Entry form */}
                             {entryMode === 'manual' && (
-                                <div className="category-block" style={{marginBottom:'1.25rem'}}>
+                                <div className="category-block tab-content-enter" style={{marginBottom:'1.25rem'}}>
                                     <div style={{fontWeight:'700', marginBottom:'1rem'}}>New Shared Expense</div>
                                     <form onSubmit={handleLogSubmit}>
                                         <div style={{display:'grid', gap:'0.75rem'}}>
@@ -2204,7 +2206,7 @@
 
                             {/* Balances */}
                             {logs.length > 0 && (
-                                <>
+                                <div className="tab-content-enter">
                                     <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>Balances</div>
                                     <div style={{display:'grid', gap:'0.5rem', marginBottom:'1.25rem'}}>
                                         {travelers.map((t, i) => {
@@ -2286,7 +2288,7 @@
                                     <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>Expense Log</div>
                                     <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
                                         {logs.map(log => (
-                                            <div key={log.id} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.8rem 1rem'}}>
+                                            <div key={log.id} className="tab-content-enter" style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.8rem 1rem', transition:'all 0.2s ease'}}>
                                                 <div style={{width:'8px', height:'8px', borderRadius:'50%', background: catColors[log.category] || '#6B7280', flexShrink:0}}></div>
                                                 <div style={{flex:1, minWidth:0}}>
                                                     <div style={{fontWeight:'600', fontSize:'0.92rem'}}>{log.description}</div>
@@ -2299,7 +2301,7 @@
                                             </div>
                                         ))}
                                     </div>
-                                </>
+                                </div>
                             )}
 
                             {logs.length === 0 && entryMode === null && (
@@ -2527,6 +2529,8 @@
             const communityMapObj = useRef(null);
             const communityMarkersRef = useRef([]);
             const pollRef = useRef(null);
+            const [travelNews, setTravelNews] = useState([]);
+            const [newsLoading, setNewsLoading] = useState(false);
 
             // ── Load posts from Supabase ──
             const loadPosts = async () => {
@@ -2595,6 +2599,37 @@
             useEffect(() => { localStorage.setItem(FRIENDS_KEY, JSON.stringify(friends)); }, [friends]);
             useEffect(() => { localStorage.setItem(FRIENDS_KEY + '_requests', JSON.stringify(friendRequests)); }, [friendRequests]);
             useEffect(() => { localStorage.setItem(MAP_VIS_KEY, mapVisibility); }, [mapVisibility]);
+
+            // ── Travel news feed ──
+            useEffect(() => {
+                const fetchNews = async () => {
+                    setNewsLoading(true);
+                    try {
+                        const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=travel+tourism+destination+airline+hotel+-politics+-war+-crime&hl=en-US&gl=US&ceid=US:en'));
+                        const data = await res.json();
+                        if (data.status === 'ok' && data.items) {
+                            const filtered = data.items
+                                .filter(item => {
+                                    const t = (item.title + ' ' + (item.description || '')).toLowerCase();
+                                    return !/(politic|trump|biden|congress|senate|war|kill|murder|terror|shoot|bomb|attack|crash|dead|death|arrest|scandal|lawsuit|indict|convict|prison|protest)/i.test(t);
+                                })
+                                .slice(0, 8)
+                                .map(item => ({
+                                    title: item.title.replace(/ - [\w\s]+$/, ''),
+                                    link: item.link,
+                                    source: item.title.match(/ - ([\w\s]+)$/)?.[1] || '',
+                                    pubDate: item.pubDate,
+                                    thumbnail: item.thumbnail || item.enclosure?.link || ''
+                                }));
+                            setTravelNews(filtered);
+                        }
+                    } catch (err) { console.error('News fetch error:', err); }
+                    setNewsLoading(false);
+                };
+                fetchNews();
+                const newsInterval = setInterval(fetchNews, 10 * 60 * 1000); // refresh every 10 min
+                return () => clearInterval(newsInterval);
+            }, []);
 
             // ── Community map init ──
             useEffect(() => {
@@ -2995,6 +3030,40 @@
                         {mapVisibility === 'private' && (
                             <p style={{fontSize:'0.73rem', color:'var(--text-muted)', textAlign:'center', marginTop:'0.5rem'}}>Only you can see this map</p>
                         )}
+
+                        {/* ── Travel News ── */}
+                        <div style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'14px', overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', marginTop:'1rem'}}>
+                            <div style={{padding:'0.75rem 1rem', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                                <span style={{fontSize:'1rem'}}>🌍</span>
+                                <span style={{fontWeight:'700', fontSize:'0.9rem', color:'var(--text)'}}>Travel News</span>
+                            </div>
+                            <div style={{maxHeight:'420px', overflowY:'auto'}}>
+                                {newsLoading && travelNews.length === 0 && (
+                                    <div style={{padding:'2rem 1rem', textAlign:'center', color:'var(--text-muted)', fontSize:'0.85rem'}}>Loading news...</div>
+                                )}
+                                {travelNews.length === 0 && !newsLoading && (
+                                    <div style={{padding:'2rem 1rem', textAlign:'center', color:'var(--text-muted)', fontSize:'0.85rem'}}>No travel news right now</div>
+                                )}
+                                {travelNews.map((item, i) => (
+                                    <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" style={{display:'flex', gap:'0.7rem', padding:'0.7rem 1rem', textDecoration:'none', color:'var(--text)', borderBottom: i < travelNews.length - 1 ? '1px solid var(--border)' : 'none', transition:'background 0.15s', alignItems:'flex-start'}}
+                                        onMouseEnter={e => e.currentTarget.style.background='var(--bg)'}
+                                        onMouseLeave={e => e.currentTarget.style.background='transparent'}
+                                    >
+                                        {item.thumbnail && (
+                                            <img src={item.thumbnail} alt="" style={{width:'56px', height:'56px', borderRadius:'8px', objectFit:'cover', flexShrink:0}} onError={e => e.target.style.display='none'} />
+                                        )}
+                                        <div style={{flex:1, minWidth:0}}>
+                                            <div style={{fontSize:'0.82rem', fontWeight:'600', lineHeight:'1.35', color:'var(--text)', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden'}}>{item.title}</div>
+                                            <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'0.3rem'}}>
+                                                {item.source && <span style={{fontSize:'0.7rem', color:'var(--primary)', fontWeight:'600'}}>{item.source}</span>}
+                                                <span style={{fontSize:'0.68rem', color:'var(--text-muted)'}}>{timeAgo(item.pubDate)}</span>
+                                            </div>
+                                        </div>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0, marginTop:'0.2rem'}}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                     </div>}
                 </div>
