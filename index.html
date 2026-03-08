@@ -2027,79 +2027,83 @@
         }
 
         function PlacesView({ places, onAddPlace, onToggleStatus, onDeletePlace }) {
-            const [showForm, setShowForm] = useState(false);
-            const [placeName, setPlaceName] = useState('');
-            const [isVisited, setIsVisited] = useState(false);
-
-            const handleSubmit = (e) => {
-                e.preventDefault();
-                if (placeName.trim()) {
-                    onAddPlace(placeName, isVisited);
-                    setPlaceName('');
-                    setIsVisited(false);
-                    setShowForm(false);
-                }
-            };
+            const [activeRegion, setActiveRegion] = useState('Europe');
 
             const visitedPlaces = places.filter(p => p.visited);
             const bucketList = places.filter(p => !p.visited);
+            const allPlaceNames = places.map(p => p.name.toLowerCase());
+
+            const DESTINATIONS = {
+                'Europe': [
+                    'Paris, France','Rome, Italy','Barcelona, Spain','Santorini, Greece','Amsterdam, Netherlands',
+                    'Prague, Czech Republic','Amalfi Coast, Italy','Dubrovnik, Croatia','Lisbon, Portugal',
+                    'Vienna, Austria','Edinburgh, Scotland','Reykjavik, Iceland','Florence, Italy',
+                    'Budapest, Hungary','Swiss Alps, Switzerland','Mykonos, Greece','Monaco',
+                ],
+                'Asia': [
+                    'Tokyo, Japan','Bali, Indonesia','Bangkok, Thailand','Kyoto, Japan','Singapore',
+                    'Seoul, South Korea','Maldives','Hanoi, Vietnam','Kathmandu, Nepal','Colombo, Sri Lanka',
+                    'Petra, Jordan','Phuket, Thailand','Hong Kong','Luang Prabang, Laos','Yangon, Myanmar',
+                ],
+                'Americas': [
+                    'New York, USA','Machu Picchu, Peru','Patagonia, Argentina','Rio de Janeiro, Brazil',
+                    'Costa Rica','Mexico City, Mexico','Havana, Cuba','Buenos Aires, Argentina',
+                    'Galapagos Islands','Canadian Rockies','Cartagena, Colombia','Tulum, Mexico',
+                    'Nashville, USA','San Francisco, USA','Banff, Canada',
+                ],
+                'Africa & Middle East': [
+                    'Marrakech, Morocco','Serengeti, Tanzania','Cape Town, South Africa','Dubai, UAE',
+                    'Zanzibar, Tanzania','Pyramids of Giza, Egypt','Masai Mara, Kenya','Cappadocia, Turkey',
+                    'Tel Aviv, Israel','Nairobi, Kenya','Victoria Falls, Zimbabwe','Kruger Park, South Africa',
+                ],
+                'Oceania': [
+                    'Sydney, Australia','Queenstown, New Zealand','Fiji','Great Barrier Reef, Australia',
+                    'Melbourne, Australia','Tasmania, Australia','Bora Bora, French Polynesia',
+                    'Uluru, Australia','Milford Sound, New Zealand',
+                ],
+            };
+
+            const regions = Object.keys(DESTINATIONS);
 
             return (
                 <div>
-                    {showForm ? (
-                        <div className="add-place-form">
-                            <h3>Add a Place</h3>
-                            <form onSubmit={handleSubmit}>
-                                <div className="form-group">
-                                    <label>Place Name</label>
-                                    <input
-                                        type="text"
-                                        value={placeName}
-                                        onChange={(e) => setPlaceName(e.target.value)}
-                                        placeholder="e.g., Tokyo, Japan"
-                                        required
-                                    />
-                                </div>
-                                <div className="toggle-group">
-                                    <button
-                                        type="button"
-                                        className={`toggle-btn ${!isVisited ? 'active' : ''}`}
-                                        onClick={() => setIsVisited(false)}
-                                    >
-                                        Bucket List
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className={`toggle-btn ${isVisited ? 'active' : ''}`}
-                                        onClick={() => setIsVisited(true)}
-                                    >
-                                        Already Visited
-                                    </button>
-                                </div>
-                                <div style={{display: 'flex', gap: '1rem'}}>
-                                    <button type="submit" className="btn btn-primary" style={{flex: 1}}>
-                                        Add Place
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="btn"
-                                        onClick={() => setShowForm(false)}
-                                        style={{flex: 1}}
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </form>
+                    {/* ── Discover Places ── */}
+                    <div style={{marginBottom:'2.5rem'}}>
+                        <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.25rem'}}>Places to Visit</h2>
+                        <p style={{fontSize:'0.85rem', color:'var(--text-muted)', marginBottom:'1.25rem'}}>Tap <strong>+</strong> to add to your bucket list.</p>
+
+                        {/* Region tabs */}
+                        <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap', marginBottom:'1rem'}}>
+                            {regions.map(r => (
+                                <button key={r} onClick={() => setActiveRegion(r)} style={{padding:'0.4rem 0.9rem', borderRadius:'20px', border: activeRegion === r ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: activeRegion === r ? 'rgba(255,90,95,0.08)' : 'var(--card-bg)', color: activeRegion === r ? 'var(--primary)' : 'var(--text)', fontWeight: activeRegion === r ? '700' : '500', fontSize:'0.82rem', cursor:'pointer', fontFamily:'Inter, sans-serif', transition:'all 0.15s'}}>
+                                    {r}
+                                </button>
+                            ))}
                         </div>
-                    ) : (
-                        <button
-                            className="create-list-btn"
-                            onClick={() => setShowForm(true)}
-                            style={{marginBottom: '2rem'}}
-                        >
-                            + Add New Place
-                        </button>
-                    )}
+
+                        {/* Destination list */}
+                        <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+                            {DESTINATIONS[activeRegion].map(dest => {
+                                const key = dest.toLowerCase();
+                                const inBucket  = bucketList.find(p => p.name.toLowerCase() === key);
+                                const inVisited = visitedPlaces.find(p => p.name.toLowerCase() === key);
+                                return (
+                                    <div key={dest} style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.7rem 1rem', borderRadius:'10px', background:'var(--card-bg)', border:'1px solid var(--border)'}}>
+                                        <span style={{fontSize:'0.9rem', color:'var(--text)', fontWeight:'500'}}>{dest}</span>
+                                        {inVisited ? (
+                                            <span style={{fontSize:'0.75rem', color:'#22c55e', fontWeight:'700', background:'rgba(34,197,94,0.1)', padding:'0.25rem 0.7rem', borderRadius:'20px'}}>✓ Visited</span>
+                                        ) : inBucket ? (
+                                            <span style={{fontSize:'0.75rem', color:'var(--primary)', fontWeight:'700', background:'rgba(255,90,95,0.1)', padding:'0.25rem 0.7rem', borderRadius:'20px'}}>♥ Listed</span>
+                                        ) : (
+                                            <button onClick={() => onAddPlace(dest, false)} style={{width:'30px', height:'30px', borderRadius:'50%', border:'2px solid var(--primary)', background:'none', color:'var(--primary)', fontSize:'1.2rem', lineHeight:1, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', transition:'all 0.15s', flexShrink:0}} onMouseEnter={e => { e.currentTarget.style.background='var(--primary)'; e.currentTarget.style.color='#fff'; }} onMouseLeave={e => { e.currentTarget.style.background='none'; e.currentTarget.style.color='var(--primary)'; }}>
+                                                +
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
 
                     <div style={{marginBottom: '3rem'}}>
                         <h2 style={{fontSize: '1.25rem', fontWeight: '700', marginBottom: '1.25rem', color: 'var(--text)'}}>
