@@ -1656,7 +1656,7 @@
                     <div className="main-content">
                         <div className="dashboard">
                             <div className="dashboard-header">
-                                <h1>{profile?.full_name ? profile.full_name.split(' ')[0] + ', welcome to your travel hub' : 'Your Travel Hub'}</h1>
+                                <h1>{profile?.full_name ? profile.full_name.split(' ')[0] + ', Where To?' : 'Where To?'}</h1>
                                 <p>Plan, track, and dream about your next adventure.</p>
                             </div>
 
@@ -2602,32 +2602,69 @@
 
             // ── Travel news feed ──
             useEffect(() => {
+                const NEGATIVE_RE = /(politic|trump|biden|congress|senate|war\b|kill|murder|terror|shoot|bomb|attack|crash|dead|death|arrest|scandal|lawsuit|indict|convict|prison|protest|gun|weapon|hostage|abduct|ransomware)/i;
+                const feeds = [
+                    'https://www.lonelyplanet.com/news/feed',
+                    'https://feeds.bbci.co.uk/news/topics/cr50y580r80t/rss.xml',
+                    'https://www.travelandleisure.com/feeds/all',
+                    'https://www.cntraveler.com/feed/rss',
+                ];
+                const parseRSS = (xml) => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(xml, 'text/xml');
+                    const items = doc.querySelectorAll('item');
+                    const results = [];
+                    items.forEach(item => {
+                        const title = item.querySelector('title')?.textContent || '';
+                        const link = item.querySelector('link')?.textContent || '';
+                        const pubDate = item.querySelector('pubDate')?.textContent || '';
+                        const desc = item.querySelector('description')?.textContent || '';
+                        let thumbnail = '';
+                        const media = item.querySelector('thumbnail') || item.getElementsByTagNameNS('http://search.yahoo.com/mrss/', 'thumbnail')[0] || item.getElementsByTagNameNS('http://search.yahoo.com/mrss/', 'content')[0];
+                        if (media) thumbnail = media.getAttribute('url') || '';
+                        if (!thumbnail) {
+                            const imgMatch = desc.match(/<img[^>]+src=["']([^"']+)["']/);
+                            if (imgMatch) thumbnail = imgMatch[1];
+                        }
+                        const enclosure = item.querySelector('enclosure');
+                        if (!thumbnail && enclosure) thumbnail = enclosure.getAttribute('url') || '';
+                        if (title && link) results.push({ title, link, pubDate, thumbnail, source: '' });
+                    });
+                    return results;
+                };
                 const fetchNews = async () => {
                     setNewsLoading(true);
-                    try {
-                        const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=travel+tourism+destination+airline+hotel+-politics+-war+-crime&hl=en-US&gl=US&ceid=US:en'));
-                        const data = await res.json();
-                        if (data.status === 'ok' && data.items) {
-                            const filtered = data.items
-                                .filter(item => {
-                                    const t = (item.title + ' ' + (item.description || '')).toLowerCase();
-                                    return !/(politic|trump|biden|congress|senate|war|kill|murder|terror|shoot|bomb|attack|crash|dead|death|arrest|scandal|lawsuit|indict|convict|prison|protest)/i.test(t);
-                                })
-                                .slice(0, 8)
-                                .map(item => ({
-                                    title: item.title.replace(/ - [\w\s]+$/, ''),
-                                    link: item.link,
-                                    source: item.title.match(/ - ([\w\s]+)$/)?.[1] || '',
-                                    pubDate: item.pubDate,
-                                    thumbnail: item.thumbnail || item.enclosure?.link || ''
-                                }));
-                            setTravelNews(filtered);
-                        }
-                    } catch (err) { console.error('News fetch error:', err); }
+                    let allItems = [];
+                    for (const feedUrl of feeds) {
+                        try {
+                            const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(feedUrl);
+                            const res = await fetch(proxyUrl);
+                            if (!res.ok) continue;
+                            const xml = await res.text();
+                            const items = parseRSS(xml);
+                            // Extract source from feed URL
+                            const sourceName = feedUrl.includes('lonelyplanet') ? 'Lonely Planet' : feedUrl.includes('bbc') ? 'BBC Travel' : feedUrl.includes('travelandleisure') ? 'Travel + Leisure' : feedUrl.includes('cntraveler') ? 'Conde Nast' : '';
+                            items.forEach(it => it.source = sourceName);
+                            allItems = allItems.concat(items);
+                        } catch (err) { console.warn('Feed error:', feedUrl, err); }
+                    }
+                    // Filter out negative content and deduplicate
+                    const seen = new Set();
+                    const filtered = allItems
+                        .filter(item => {
+                            if (NEGATIVE_RE.test(item.title)) return false;
+                            const key = item.title.toLowerCase().slice(0, 50);
+                            if (seen.has(key)) return false;
+                            seen.add(key);
+                            return true;
+                        })
+                        .sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate))
+                        .slice(0, 10);
+                    setTravelNews(filtered);
                     setNewsLoading(false);
                 };
                 fetchNews();
-                const newsInterval = setInterval(fetchNews, 10 * 60 * 1000); // refresh every 10 min
+                const newsInterval = setInterval(fetchNews, 10 * 60 * 1000);
                 return () => clearInterval(newsInterval);
             }, []);
 
