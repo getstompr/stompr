@@ -2870,13 +2870,22 @@
                 searchDebounce.current = setTimeout(async () => {
                     setSearching(true);
                     try {
-                        const pattern = `%${query}%`;
-                        const { data, error } = await supabaseClient
+                        const { data: d1 } = await supabaseClient
                             .from('profiles')
-                            .select('id, full_name, username')
-                            .or(`full_name.ilike.${pattern},username.ilike.${pattern}`)
+                            .select('id, full_name, username, avatar_url')
+                            .ilike('full_name', `%${query}%`)
                             .neq('id', session.user.id)
                             .limit(10);
+                        const { data: d2 } = await supabaseClient
+                            .from('profiles')
+                            .select('id, full_name, username, avatar_url')
+                            .ilike('username', `%${query}%`)
+                            .neq('id', session.user.id)
+                            .limit(10);
+                        const merged = [...(d1 || [])];
+                        (d2 || []).forEach(u => { if (!merged.find(m => m.id === u.id)) merged.push(u); });
+                        const data = merged;
+                        const error = null;
                         if (error) console.error('Friend search error:', error);
                         setSearchResults(data || []);
                     } catch { setSearchResults([]); }
