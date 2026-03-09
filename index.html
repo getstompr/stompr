@@ -2870,25 +2870,21 @@
                 searchDebounce.current = setTimeout(async () => {
                     setSearching(true);
                     try {
-                        const { data: d1 } = await supabaseClient
+                        // First just fetch ALL profiles to debug
+                        const { data: allProfiles, error: allErr } = await supabaseClient
                             .from('profiles')
                             .select('id, full_name, username, avatar_url')
-                            .ilike('full_name', `%${query}%`)
                             .neq('id', session.user.id)
-                            .limit(10);
-                        const { data: d2 } = await supabaseClient
-                            .from('profiles')
-                            .select('id, full_name, username, avatar_url')
-                            .ilike('username', `%${query}%`)
-                            .neq('id', session.user.id)
-                            .limit(10);
-                        const merged = [...(d1 || [])];
-                        (d2 || []).forEach(u => { if (!merged.find(m => m.id === u.id)) merged.push(u); });
-                        const data = merged;
-                        const error = null;
-                        if (error) console.error('Friend search error:', error);
-                        setSearchResults(data || []);
-                    } catch { setSearchResults([]); }
+                            .limit(50);
+                        console.log('All other profiles:', allProfiles, 'Error:', allErr);
+                        // Filter client-side as fallback
+                        const q = query.toLowerCase();
+                        const data = (allProfiles || []).filter(u =>
+                            (u.full_name || '').toLowerCase().includes(q) ||
+                            (u.username || '').toLowerCase().includes(q)
+                        );
+                        setSearchResults(data);
+                    } catch (e) { console.error('Search exception:', e); setSearchResults([]); }
                     setSearching(false);
                 }, 400);
             };
