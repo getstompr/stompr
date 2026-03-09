@@ -3839,7 +3839,7 @@ RULES:
                     const token = freshSession?.access_token;
                     const res = await fetch('https://iqczpwzllkahswgzwzhc.supabase.co/functions/v1/ai-chat', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': 'sb_publishable_EqqOV0ptjB2hgIhqVsITUA_gDTB6L6n' },
                         body: JSON.stringify({ message: input.trim(), history: messages.slice(-20), systemPrompt: agentProfile ? buildSystemPrompt(agentProfile) : undefined })
                     });
                     const data = await res.json();
