@@ -28,19 +28,21 @@ serve(async (req) => {
     )
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
+    console.log('auth result:', { userId: user?.id, authError: authError?.message })
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized', detail: authError?.message }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('credits, daily_messages_count, daily_messages_date')
       .eq('id', user.id)
       .single()
+    console.log('profile result:', { profile, profileError: profileError?.message })
 
-    if (!profile || profile.credits <= 0) {
+    if (!profile || profile.credits == null || profile.credits <= 0) {
       return new Response(JSON.stringify({ error: 'no_credits' }), {
         status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
@@ -99,6 +101,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   } catch (error) {
+    console.error('Unhandled error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
