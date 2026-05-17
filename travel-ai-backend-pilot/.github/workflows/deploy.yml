@@ -1,0 +1,488 @@
+name: deploy
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  resolve-target:
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.set-target.outputs.target }}
+    steps:
+      - id: set-target
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "target=dev" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=${{ github.event.inputs.target_environment }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy-dev:
+    if: needs.resolve-target.outputs.target == 'dev'
+    needs: [resolve-target]
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests and build
+        run: |
+          npm test
+          npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.DEV_AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        id: image
+        env:
+          ECR_REPOSITORY: ${{ secrets.DEV_ECR_REPOSITORY }}
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Validate go-live deploy config
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECR_REPOSITORY: ${{ secrets.DEV_ECR_REPOSITORY }}
+          TASK_FAMILY: ${{ secrets.DEV_ECS_TASK_FAMILY }}
+          EXECUTION_ROLE_ARN: ${{ secrets.DEV_ECS_EXECUTION_ROLE_ARN }}
+          TASK_ROLE_ARN: ${{ secrets.DEV_ECS_TASK_ROLE_ARN }}
+          CORS_ALLOW_ORIGINS: ${{ secrets.DEV_CORS_ALLOW_ORIGINS }}
+          MODEL_PRIMARY_PROVIDER: ${{ secrets.DEV_MODEL_PRIMARY_PROVIDER }}
+          MODEL_PRIMARY_MODEL: ${{ secrets.DEV_MODEL_PRIMARY_MODEL }}
+          MODEL_FALLBACK_PROVIDER: ${{ secrets.DEV_MODEL_FALLBACK_PROVIDER }}
+          MODEL_FALLBACK_MODEL: ${{ secrets.DEV_MODEL_FALLBACK_MODEL }}
+          GATE_ROUTER_CLASSIFIER_ENABLED: ${{ secrets.DEV_GATE_ROUTER_CLASSIFIER_ENABLED }}
+          GATE_ROUTER_CLASSIFIER_PROVIDER: ${{ secrets.DEV_GATE_ROUTER_CLASSIFIER_PROVIDER }}
+          GATE_ROUTER_CLASSIFIER_MODEL: ${{ secrets.DEV_GATE_ROUTER_CLASSIFIER_MODEL }}
+          OPENAI_API_KEY_SECRET_ARN: ${{ secrets.DEV_OPENAI_API_KEY_SECRET_ARN }}
+          ANTHROPIC_API_KEY_SECRET_ARN: ${{ secrets.DEV_ANTHROPIC_API_KEY_SECRET_ARN }}
+          DATABASE_URL_SECRET_ARN: ${{ secrets.DEV_DATABASE_URL_SECRET_ARN }}
+          WIDGET_SIGNING_SECRET_ARN: ${{ secrets.DEV_WIDGET_SIGNING_SECRET_ARN }}
+          WIDGET_ADMIN_SECRET_ARN: ${{ secrets.DEV_WIDGET_ADMIN_SECRET_ARN }}
+          LOG_GROUP: ${{ secrets.DEV_LOG_GROUP }}
+          ECS_CLUSTER: ${{ secrets.DEV_ECS_CLUSTER }}
+          ECS_SERVICE: ${{ secrets.DEV_ECS_SERVICE }}
+          PRIVATE_SUBNETS: ${{ secrets.DEV_PRIVATE_SUBNETS }}
+          ECS_SECURITY_GROUP: ${{ secrets.DEV_ECS_SECURITY_GROUP }}
+          BASE_URL: ${{ secrets.DEV_BASE_URL }}
+        run: |
+          chmod +x scripts/validate-go-live-config.sh
+          ./scripts/validate-go-live-config.sh dev
+
+      - name: Render task definition
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
+          TASK_FAMILY: ${{ secrets.DEV_ECS_TASK_FAMILY }}
+          EXECUTION_ROLE_ARN: ${{ secrets.DEV_ECS_EXECUTION_ROLE_ARN }}
+          TASK_ROLE_ARN: ${{ secrets.DEV_ECS_TASK_ROLE_ARN }}
+          CORS_ALLOW_ORIGINS: ${{ secrets.DEV_CORS_ALLOW_ORIGINS }}
+          MODEL_PRIMARY_PROVIDER: ${{ secrets.DEV_MODEL_PRIMARY_PROVIDER }}
+          MODEL_PRIMARY_MODEL: ${{ secrets.DEV_MODEL_PRIMARY_MODEL }}
+          MODEL_FALLBACK_PROVIDER: ${{ secrets.DEV_MODEL_FALLBACK_PROVIDER }}
+          MODEL_FALLBACK_MODEL: ${{ secrets.DEV_MODEL_FALLBACK_MODEL }}
+          OPENAI_BASE_URL: ${{ secrets.DEV_OPENAI_BASE_URL }}
+          ANTHROPIC_BASE_URL: ${{ secrets.DEV_ANTHROPIC_BASE_URL }}
+          RATE_LIMIT_ENABLED: ${{ secrets.DEV_RATE_LIMIT_ENABLED }}
+          RATE_LIMIT_WINDOW_MS: ${{ secrets.DEV_RATE_LIMIT_WINDOW_MS }}
+          RATE_LIMIT_MAX_REQUESTS: ${{ secrets.DEV_RATE_LIMIT_MAX_REQUESTS }}
+          RATE_LIMIT_EXCLUDE_PATH_PREFIXES: ${{ secrets.DEV_RATE_LIMIT_EXCLUDE_PATH_PREFIXES }}
+          GATE_ROUTER_CLASSIFIER_ENABLED: ${{ secrets.DEV_GATE_ROUTER_CLASSIFIER_ENABLED }}
+          GATE_ROUTER_CLASSIFIER_PROVIDER: ${{ secrets.DEV_GATE_ROUTER_CLASSIFIER_PROVIDER }}
+          GATE_ROUTER_CLASSIFIER_MODEL: ${{ secrets.DEV_GATE_ROUTER_CLASSIFIER_MODEL }}
+          DATABASE_URL_SECRET_ARN: ${{ secrets.DEV_DATABASE_URL_SECRET_ARN }}
+          WIDGET_SIGNING_SECRET_ARN: ${{ secrets.DEV_WIDGET_SIGNING_SECRET_ARN }}
+          WIDGET_ADMIN_SECRET_ARN: ${{ secrets.DEV_WIDGET_ADMIN_SECRET_ARN }}
+          OPENAI_API_KEY_SECRET_ARN: ${{ secrets.DEV_OPENAI_API_KEY_SECRET_ARN }}
+          ANTHROPIC_API_KEY_SECRET_ARN: ${{ secrets.DEV_ANTHROPIC_API_KEY_SECRET_ARN }}
+          LOG_GROUP: ${{ secrets.DEV_LOG_GROUP }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          jq \
+            --arg FAMILY "$TASK_FAMILY" \
+            --arg EXEC_ROLE "$EXECUTION_ROLE_ARN" \
+            --arg TASK_ROLE "$TASK_ROLE_ARN" \
+            --arg IMAGE "$IMAGE_URI" \
+            --arg CORS "$CORS_ALLOW_ORIGINS" \
+            --arg PRIMARY_PROVIDER "$MODEL_PRIMARY_PROVIDER" \
+            --arg PRIMARY_MODEL "$MODEL_PRIMARY_MODEL" \
+            --arg FALLBACK_PROVIDER "$MODEL_FALLBACK_PROVIDER" \
+            --arg FALLBACK_MODEL "$MODEL_FALLBACK_MODEL" \
+            --arg OPENAI_BASE_URL "$OPENAI_BASE_URL" \
+            --arg ANTHROPIC_BASE_URL "$ANTHROPIC_BASE_URL" \
+            --arg RATE_LIMIT_ENABLED "$RATE_LIMIT_ENABLED" \
+            --arg RATE_LIMIT_WINDOW_MS "$RATE_LIMIT_WINDOW_MS" \
+            --arg RATE_LIMIT_MAX_REQUESTS "$RATE_LIMIT_MAX_REQUESTS" \
+            --arg RATE_LIMIT_EXCLUDE_PATH_PREFIXES "$RATE_LIMIT_EXCLUDE_PATH_PREFIXES" \
+            --arg GATE_ROUTER_CLASSIFIER_ENABLED "$GATE_ROUTER_CLASSIFIER_ENABLED" \
+            --arg GATE_ROUTER_CLASSIFIER_PROVIDER "$GATE_ROUTER_CLASSIFIER_PROVIDER" \
+            --arg GATE_ROUTER_CLASSIFIER_MODEL "$GATE_ROUTER_CLASSIFIER_MODEL" \
+            --arg DB_SECRET "$DATABASE_URL_SECRET_ARN" \
+            --arg SIGN_SECRET "$WIDGET_SIGNING_SECRET_ARN" \
+            --arg ADMIN_SECRET "$WIDGET_ADMIN_SECRET_ARN" \
+            --arg OPENAI_KEY_SECRET "$OPENAI_API_KEY_SECRET_ARN" \
+            --arg ANTHROPIC_KEY_SECRET "$ANTHROPIC_API_KEY_SECRET_ARN" \
+            --arg LOG_GROUP "$LOG_GROUP" \
+            --arg AWS_REGION "$AWS_REGION" \
+            '.family = $FAMILY |
+             .executionRoleArn = $EXEC_ROLE |
+             .taskRoleArn = $TASK_ROLE |
+             .containerDefinitions[0].image = $IMAGE |
+             .containerDefinitions[0].environment |= map(
+               if .name == "CORS_ALLOW_ORIGINS" then .value = $CORS
+               elif .name == "MODEL_PRIMARY_PROVIDER" then .value = $PRIMARY_PROVIDER
+               elif .name == "MODEL_PRIMARY_MODEL" then .value = $PRIMARY_MODEL
+               elif .name == "MODEL_FALLBACK_PROVIDER" then .value = $FALLBACK_PROVIDER
+               elif .name == "MODEL_FALLBACK_MODEL" then .value = $FALLBACK_MODEL
+               elif .name == "OPENAI_BASE_URL" then .value = $OPENAI_BASE_URL
+               elif .name == "ANTHROPIC_BASE_URL" then .value = $ANTHROPIC_BASE_URL
+               elif .name == "RATE_LIMIT_ENABLED" then .value = (if ($RATE_LIMIT_ENABLED|length) > 0 then $RATE_LIMIT_ENABLED else .value end)
+               elif .name == "RATE_LIMIT_WINDOW_MS" then .value = (if ($RATE_LIMIT_WINDOW_MS|length) > 0 then $RATE_LIMIT_WINDOW_MS else .value end)
+               elif .name == "RATE_LIMIT_MAX_REQUESTS" then .value = (if ($RATE_LIMIT_MAX_REQUESTS|length) > 0 then $RATE_LIMIT_MAX_REQUESTS else .value end)
+               elif .name == "RATE_LIMIT_EXCLUDE_PATH_PREFIXES" then .value = (if ($RATE_LIMIT_EXCLUDE_PATH_PREFIXES|length) > 0 then $RATE_LIMIT_EXCLUDE_PATH_PREFIXES else .value end)
+               elif .name == "GATE_ROUTER_CLASSIFIER_ENABLED" then .value = (if ($GATE_ROUTER_CLASSIFIER_ENABLED|length) > 0 then $GATE_ROUTER_CLASSIFIER_ENABLED else .value end)
+               elif .name == "GATE_ROUTER_CLASSIFIER_PROVIDER" then .value = (if ($GATE_ROUTER_CLASSIFIER_PROVIDER|length) > 0 then $GATE_ROUTER_CLASSIFIER_PROVIDER else .value end)
+               elif .name == "GATE_ROUTER_CLASSIFIER_MODEL" then .value = (if ($GATE_ROUTER_CLASSIFIER_MODEL|length) > 0 then $GATE_ROUTER_CLASSIFIER_MODEL else .value end)
+               else . end
+             ) |
+             .containerDefinitions[0].secrets |= map(
+                if .name == "DATABASE_URL" then .valueFrom = $DB_SECRET
+                elif .name == "WIDGET_SIGNING_SECRET" then .valueFrom = $SIGN_SECRET
+                elif .name == "WIDGET_ADMIN_KEY" then .valueFrom = $ADMIN_SECRET
+                elif .name == "OPENAI_API_KEY" then .valueFrom = $OPENAI_KEY_SECRET
+                elif .name == "ANTHROPIC_API_KEY" then .valueFrom = $ANTHROPIC_KEY_SECRET
+                else . end
+             ) |
+             .containerDefinitions[0].logConfiguration.options["awslogs-group"] = $LOG_GROUP |
+             .containerDefinitions[0].logConfiguration.options["awslogs-region"] = $AWS_REGION' \
+            .aws/taskdef.template.json > taskdef.json
+
+      - name: Register task definition
+        id: register-task
+        run: |
+          TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://taskdef.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "task_def_arn=$TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Run database migration task
+        env:
+          ECS_CLUSTER: ${{ secrets.DEV_ECS_CLUSTER }}
+          PRIVATE_SUBNETS: ${{ secrets.DEV_PRIVATE_SUBNETS }}
+          ECS_SECURITY_GROUP: ${{ secrets.DEV_ECS_SECURITY_GROUP }}
+          TASK_DEF_ARN: ${{ steps.register-task.outputs.task_def_arn }}
+        run: |
+          IFS=',' read -ra SN <<< "$PRIVATE_SUBNETS"
+          SUBNETS_JSON=$(printf '"%s",' "${SN[@]}")
+          SUBNETS_JSON="[${SUBNETS_JSON%,}]"
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition "$TASK_DEF_ARN" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=$SUBNETS_JSON,securityGroups=[$ECS_SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"app","command":["node","dist/db/migrate.js"]}]}' \
+            --query 'tasks[0].taskArn' --output text)
+
+          aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN"
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" --query 'tasks[0].containers[0].exitCode' --output text)
+          if [[ "$EXIT_CODE" != "0" ]]; then
+            echo "Migration task failed with exit code $EXIT_CODE"
+            aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN"
+            exit 1
+          fi
+
+      - name: Deploy ECS service
+        env:
+          ECS_CLUSTER: ${{ secrets.DEV_ECS_CLUSTER }}
+          ECS_SERVICE: ${{ secrets.DEV_ECS_SERVICE }}
+          TASK_DEF_ARN: ${{ steps.register-task.outputs.task_def_arn }}
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$TASK_DEF_ARN" \
+            --force-new-deployment > /dev/null
+
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+
+      - name: Smoke tests
+        env:
+          BASE_URL: ${{ secrets.DEV_BASE_URL }}
+          WIDGET_ADMIN_SECRET_ARN: ${{ secrets.DEV_WIDGET_ADMIN_SECRET_ARN }}
+          SMOKE_TENANT_ID: ${{ secrets.DEV_SMOKE_TENANT_ID }}
+          SMOKE_SITE_ID: ${{ secrets.DEV_SMOKE_SITE_ID }}
+          SMOKE_SUMMARY_PATH: /tmp/smoke_summary_dev.json
+        run: |
+          chmod +x scripts/smoke-test.sh
+          export WIDGET_ADMIN_KEY="$(aws secretsmanager get-secret-value --secret-id "$WIDGET_ADMIN_SECRET_ARN" --query SecretString --output text)"
+          ./scripts/smoke-test.sh "$BASE_URL" "${SMOKE_TENANT_ID:-tenant_luxe_demo}" "${SMOKE_SITE_ID:-luxevoyages.example}"
+
+      - name: Post-deploy verification summary
+        run: |
+          echo "Post-deploy verification summary (dev):"
+          cat /tmp/smoke_summary_dev.json
+
+  deploy-prod:
+    if: needs.resolve-target.outputs.target == 'prod'
+    needs: [resolve-target]
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests and build
+        run: |
+          npm test
+          npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.PROD_AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        id: image
+        env:
+          ECR_REPOSITORY: ${{ secrets.PROD_ECR_REPOSITORY }}
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Validate go-live deploy config
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECR_REPOSITORY: ${{ secrets.PROD_ECR_REPOSITORY }}
+          TASK_FAMILY: ${{ secrets.PROD_ECS_TASK_FAMILY }}
+          EXECUTION_ROLE_ARN: ${{ secrets.PROD_ECS_EXECUTION_ROLE_ARN }}
+          TASK_ROLE_ARN: ${{ secrets.PROD_ECS_TASK_ROLE_ARN }}
+          CORS_ALLOW_ORIGINS: ${{ secrets.PROD_CORS_ALLOW_ORIGINS }}
+          MODEL_PRIMARY_PROVIDER: ${{ secrets.PROD_MODEL_PRIMARY_PROVIDER }}
+          MODEL_PRIMARY_MODEL: ${{ secrets.PROD_MODEL_PRIMARY_MODEL }}
+          MODEL_FALLBACK_PROVIDER: ${{ secrets.PROD_MODEL_FALLBACK_PROVIDER }}
+          MODEL_FALLBACK_MODEL: ${{ secrets.PROD_MODEL_FALLBACK_MODEL }}
+          GATE_ROUTER_CLASSIFIER_ENABLED: ${{ secrets.PROD_GATE_ROUTER_CLASSIFIER_ENABLED }}
+          GATE_ROUTER_CLASSIFIER_PROVIDER: ${{ secrets.PROD_GATE_ROUTER_CLASSIFIER_PROVIDER }}
+          GATE_ROUTER_CLASSIFIER_MODEL: ${{ secrets.PROD_GATE_ROUTER_CLASSIFIER_MODEL }}
+          OPENAI_API_KEY_SECRET_ARN: ${{ secrets.PROD_OPENAI_API_KEY_SECRET_ARN }}
+          ANTHROPIC_API_KEY_SECRET_ARN: ${{ secrets.PROD_ANTHROPIC_API_KEY_SECRET_ARN }}
+          DATABASE_URL_SECRET_ARN: ${{ secrets.PROD_DATABASE_URL_SECRET_ARN }}
+          WIDGET_SIGNING_SECRET_ARN: ${{ secrets.PROD_WIDGET_SIGNING_SECRET_ARN }}
+          WIDGET_ADMIN_SECRET_ARN: ${{ secrets.PROD_WIDGET_ADMIN_SECRET_ARN }}
+          LOG_GROUP: ${{ secrets.PROD_LOG_GROUP }}
+          ECS_CLUSTER: ${{ secrets.PROD_ECS_CLUSTER }}
+          ECS_SERVICE: ${{ secrets.PROD_ECS_SERVICE }}
+          PRIVATE_SUBNETS: ${{ secrets.PROD_PRIVATE_SUBNETS }}
+          ECS_SECURITY_GROUP: ${{ secrets.PROD_ECS_SECURITY_GROUP }}
+          BASE_URL: ${{ secrets.PROD_BASE_URL }}
+        run: |
+          chmod +x scripts/validate-go-live-config.sh
+          ./scripts/validate-go-live-config.sh prod
+
+      - name: Render task definition
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
+          TASK_FAMILY: ${{ secrets.PROD_ECS_TASK_FAMILY }}
+          EXECUTION_ROLE_ARN: ${{ secrets.PROD_ECS_EXECUTION_ROLE_ARN }}
+          TASK_ROLE_ARN: ${{ secrets.PROD_ECS_TASK_ROLE_ARN }}
+          CORS_ALLOW_ORIGINS: ${{ secrets.PROD_CORS_ALLOW_ORIGINS }}
+          MODEL_PRIMARY_PROVIDER: ${{ secrets.PROD_MODEL_PRIMARY_PROVIDER }}
+          MODEL_PRIMARY_MODEL: ${{ secrets.PROD_MODEL_PRIMARY_MODEL }}
+          MODEL_FALLBACK_PROVIDER: ${{ secrets.PROD_MODEL_FALLBACK_PROVIDER }}
+          MODEL_FALLBACK_MODEL: ${{ secrets.PROD_MODEL_FALLBACK_MODEL }}
+          OPENAI_BASE_URL: ${{ secrets.PROD_OPENAI_BASE_URL }}
+          ANTHROPIC_BASE_URL: ${{ secrets.PROD_ANTHROPIC_BASE_URL }}
+          RATE_LIMIT_ENABLED: ${{ secrets.PROD_RATE_LIMIT_ENABLED }}
+          RATE_LIMIT_WINDOW_MS: ${{ secrets.PROD_RATE_LIMIT_WINDOW_MS }}
+          RATE_LIMIT_MAX_REQUESTS: ${{ secrets.PROD_RATE_LIMIT_MAX_REQUESTS }}
+          RATE_LIMIT_EXCLUDE_PATH_PREFIXES: ${{ secrets.PROD_RATE_LIMIT_EXCLUDE_PATH_PREFIXES }}
+          GATE_ROUTER_CLASSIFIER_ENABLED: ${{ secrets.PROD_GATE_ROUTER_CLASSIFIER_ENABLED }}
+          GATE_ROUTER_CLASSIFIER_PROVIDER: ${{ secrets.PROD_GATE_ROUTER_CLASSIFIER_PROVIDER }}
+          GATE_ROUTER_CLASSIFIER_MODEL: ${{ secrets.PROD_GATE_ROUTER_CLASSIFIER_MODEL }}
+          DATABASE_URL_SECRET_ARN: ${{ secrets.PROD_DATABASE_URL_SECRET_ARN }}
+          WIDGET_SIGNING_SECRET_ARN: ${{ secrets.PROD_WIDGET_SIGNING_SECRET_ARN }}
+          WIDGET_ADMIN_SECRET_ARN: ${{ secrets.PROD_WIDGET_ADMIN_SECRET_ARN }}
+          OPENAI_API_KEY_SECRET_ARN: ${{ secrets.PROD_OPENAI_API_KEY_SECRET_ARN }}
+          ANTHROPIC_API_KEY_SECRET_ARN: ${{ secrets.PROD_ANTHROPIC_API_KEY_SECRET_ARN }}
+          LOG_GROUP: ${{ secrets.PROD_LOG_GROUP }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          jq \
+            --arg FAMILY "$TASK_FAMILY" \
+            --arg EXEC_ROLE "$EXECUTION_ROLE_ARN" \
+            --arg TASK_ROLE "$TASK_ROLE_ARN" \
+            --arg IMAGE "$IMAGE_URI" \
+            --arg CORS "$CORS_ALLOW_ORIGINS" \
+            --arg PRIMARY_PROVIDER "$MODEL_PRIMARY_PROVIDER" \
+            --arg PRIMARY_MODEL "$MODEL_PRIMARY_MODEL" \
+            --arg FALLBACK_PROVIDER "$MODEL_FALLBACK_PROVIDER" \
+            --arg FALLBACK_MODEL "$MODEL_FALLBACK_MODEL" \
+            --arg OPENAI_BASE_URL "$OPENAI_BASE_URL" \
+            --arg ANTHROPIC_BASE_URL "$ANTHROPIC_BASE_URL" \
+            --arg RATE_LIMIT_ENABLED "$RATE_LIMIT_ENABLED" \
+            --arg RATE_LIMIT_WINDOW_MS "$RATE_LIMIT_WINDOW_MS" \
+            --arg RATE_LIMIT_MAX_REQUESTS "$RATE_LIMIT_MAX_REQUESTS" \
+            --arg RATE_LIMIT_EXCLUDE_PATH_PREFIXES "$RATE_LIMIT_EXCLUDE_PATH_PREFIXES" \
+            --arg GATE_ROUTER_CLASSIFIER_ENABLED "$GATE_ROUTER_CLASSIFIER_ENABLED" \
+            --arg GATE_ROUTER_CLASSIFIER_PROVIDER "$GATE_ROUTER_CLASSIFIER_PROVIDER" \
+            --arg GATE_ROUTER_CLASSIFIER_MODEL "$GATE_ROUTER_CLASSIFIER_MODEL" \
+            --arg DB_SECRET "$DATABASE_URL_SECRET_ARN" \
+            --arg SIGN_SECRET "$WIDGET_SIGNING_SECRET_ARN" \
+            --arg ADMIN_SECRET "$WIDGET_ADMIN_SECRET_ARN" \
+            --arg OPENAI_KEY_SECRET "$OPENAI_API_KEY_SECRET_ARN" \
+            --arg ANTHROPIC_KEY_SECRET "$ANTHROPIC_API_KEY_SECRET_ARN" \
+            --arg LOG_GROUP "$LOG_GROUP" \
+            --arg AWS_REGION "$AWS_REGION" \
+            '.family = $FAMILY |
+             .executionRoleArn = $EXEC_ROLE |
+             .taskRoleArn = $TASK_ROLE |
+             .containerDefinitions[0].image = $IMAGE |
+             .containerDefinitions[0].environment |= map(
+               if .name == "CORS_ALLOW_ORIGINS" then .value = $CORS
+               elif .name == "MODEL_PRIMARY_PROVIDER" then .value = $PRIMARY_PROVIDER
+               elif .name == "MODEL_PRIMARY_MODEL" then .value = $PRIMARY_MODEL
+               elif .name == "MODEL_FALLBACK_PROVIDER" then .value = $FALLBACK_PROVIDER
+               elif .name == "MODEL_FALLBACK_MODEL" then .value = $FALLBACK_MODEL
+               elif .name == "OPENAI_BASE_URL" then .value = $OPENAI_BASE_URL
+               elif .name == "ANTHROPIC_BASE_URL" then .value = $ANTHROPIC_BASE_URL
+               elif .name == "RATE_LIMIT_ENABLED" then .value = (if ($RATE_LIMIT_ENABLED|length) > 0 then $RATE_LIMIT_ENABLED else .value end)
+               elif .name == "RATE_LIMIT_WINDOW_MS" then .value = (if ($RATE_LIMIT_WINDOW_MS|length) > 0 then $RATE_LIMIT_WINDOW_MS else .value end)
+               elif .name == "RATE_LIMIT_MAX_REQUESTS" then .value = (if ($RATE_LIMIT_MAX_REQUESTS|length) > 0 then $RATE_LIMIT_MAX_REQUESTS else .value end)
+               elif .name == "RATE_LIMIT_EXCLUDE_PATH_PREFIXES" then .value = (if ($RATE_LIMIT_EXCLUDE_PATH_PREFIXES|length) > 0 then $RATE_LIMIT_EXCLUDE_PATH_PREFIXES else .value end)
+               elif .name == "GATE_ROUTER_CLASSIFIER_ENABLED" then .value = (if ($GATE_ROUTER_CLASSIFIER_ENABLED|length) > 0 then $GATE_ROUTER_CLASSIFIER_ENABLED else .value end)
+               elif .name == "GATE_ROUTER_CLASSIFIER_PROVIDER" then .value = (if ($GATE_ROUTER_CLASSIFIER_PROVIDER|length) > 0 then $GATE_ROUTER_CLASSIFIER_PROVIDER else .value end)
+               elif .name == "GATE_ROUTER_CLASSIFIER_MODEL" then .value = (if ($GATE_ROUTER_CLASSIFIER_MODEL|length) > 0 then $GATE_ROUTER_CLASSIFIER_MODEL else .value end)
+               else . end
+             ) |
+             .containerDefinitions[0].secrets |= map(
+                if .name == "DATABASE_URL" then .valueFrom = $DB_SECRET
+                elif .name == "WIDGET_SIGNING_SECRET" then .valueFrom = $SIGN_SECRET
+                elif .name == "WIDGET_ADMIN_KEY" then .valueFrom = $ADMIN_SECRET
+                elif .name == "OPENAI_API_KEY" then .valueFrom = $OPENAI_KEY_SECRET
+                elif .name == "ANTHROPIC_API_KEY" then .valueFrom = $ANTHROPIC_KEY_SECRET
+                else . end
+             ) |
+             .containerDefinitions[0].logConfiguration.options["awslogs-group"] = $LOG_GROUP |
+             .containerDefinitions[0].logConfiguration.options["awslogs-region"] = $AWS_REGION' \
+            .aws/taskdef.template.json > taskdef.json
+
+      - name: Register task definition
+        id: register-task
+        run: |
+          TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://taskdef.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "task_def_arn=$TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Run database migration task
+        env:
+          ECS_CLUSTER: ${{ secrets.PROD_ECS_CLUSTER }}
+          PRIVATE_SUBNETS: ${{ secrets.PROD_PRIVATE_SUBNETS }}
+          ECS_SECURITY_GROUP: ${{ secrets.PROD_ECS_SECURITY_GROUP }}
+          TASK_DEF_ARN: ${{ steps.register-task.outputs.task_def_arn }}
+        run: |
+          IFS=',' read -ra SN <<< "$PRIVATE_SUBNETS"
+          SUBNETS_JSON=$(printf '"%s",' "${SN[@]}")
+          SUBNETS_JSON="[${SUBNETS_JSON%,}]"
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition "$TASK_DEF_ARN" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=$SUBNETS_JSON,securityGroups=[$ECS_SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"app","command":["node","dist/db/migrate.js"]}]}' \
+            --query 'tasks[0].taskArn' --output text)
+
+          aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN"
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" --query 'tasks[0].containers[0].exitCode' --output text)
+          if [[ "$EXIT_CODE" != "0" ]]; then
+            echo "Migration task failed with exit code $EXIT_CODE"
+            aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN"
+            exit 1
+          fi
+
+      - name: Deploy ECS service
+        env:
+          ECS_CLUSTER: ${{ secrets.PROD_ECS_CLUSTER }}
+          ECS_SERVICE: ${{ secrets.PROD_ECS_SERVICE }}
+          TASK_DEF_ARN: ${{ steps.register-task.outputs.task_def_arn }}
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$TASK_DEF_ARN" \
+            --force-new-deployment > /dev/null
+
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+
+      - name: Smoke tests
+        env:
+          BASE_URL: ${{ secrets.PROD_BASE_URL }}
+          WIDGET_ADMIN_SECRET_ARN: ${{ secrets.PROD_WIDGET_ADMIN_SECRET_ARN }}
+          SMOKE_TENANT_ID: ${{ secrets.PROD_SMOKE_TENANT_ID }}
+          SMOKE_SITE_ID: ${{ secrets.PROD_SMOKE_SITE_ID }}
+          SMOKE_SUMMARY_PATH: /tmp/smoke_summary_prod.json
+        run: |
+          chmod +x scripts/smoke-test.sh
+          export WIDGET_ADMIN_KEY="$(aws secretsmanager get-secret-value --secret-id "$WIDGET_ADMIN_SECRET_ARN" --query SecretString --output text)"
+          ./scripts/smoke-test.sh "$BASE_URL" "${SMOKE_TENANT_ID:-tenant_luxe_demo}" "${SMOKE_SITE_ID:-luxevoyages.example}"
+
+      - name: Post-deploy verification summary
+        run: |
+          echo "Post-deploy verification summary (prod):"
+          cat /tmp/smoke_summary_prod.json
