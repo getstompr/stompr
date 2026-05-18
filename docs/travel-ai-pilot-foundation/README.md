@@ -11,6 +11,8 @@ This folder contains a complete docs package for a services-led, B2B luxury trav
 - `04-competitive-landscape.md`: Competitor map and strategic implications.
 - `05-go-live-checklist.md`: Human + engineering launch checklist.
 - `06-demo-script.md`: Guided pilot demo script.
+- `07-detailed-market-analysis.md`: Sourced deep-dive market and competitor research.
+- `08-architecture-flowchart.md`: Plain-English architecture walkthrough with GitHub-rendered flowchart.
 
 ## Positioning
 This product is a conversion engine for luxury travel agencies:
