@@ -1,0 +1,9 @@
+﻿node_modules
+dist
+.git
+.github
+infra
+*.log
+npm-debug.log*
+Dockerfile*
+coverage

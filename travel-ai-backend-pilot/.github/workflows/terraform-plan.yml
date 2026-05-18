@@ -1,0 +1,44 @@
+﻿name: terraform-plan
+
+on:
+  pull_request:
+    paths:
+      - "infra/terraform/**"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan-dev:
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.DEV_AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform init
+        run: terraform init -backend-config=backend.dev.hcl.example
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan (dev)
+        env:
+          TF_VAR_widget_signing_secret_value: ${{ secrets.DEV_WIDGET_SIGNING_SECRET_VALUE }}
+          TF_VAR_widget_admin_key_value: ${{ secrets.DEV_WIDGET_ADMIN_KEY_VALUE }}
+        run: terraform plan -var-file=envs/dev.tfvars -no-color
+
