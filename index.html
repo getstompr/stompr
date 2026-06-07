@@ -1063,7 +1063,202 @@
             return markers;
         }
 
+        // ── Trust page hash router ─────────────────────────────────────────────
+        const TRUST_PAGES = ['privacy','terms','contact','about'];
+        function getHashPage() {
+            const h = window.location.hash.replace('#','').toLowerCase();
+            return TRUST_PAGES.includes(h) ? h : null;
+        }
+
+        function TrustPage({ onClose }) {
+            const [page, setPage] = React.useState(getHashPage);
+            React.useEffect(() => {
+                const handler = () => setPage(getHashPage());
+                window.addEventListener('hashchange', handler);
+                return () => window.removeEventListener('hashchange', handler);
+            }, []);
+
+            if (!page) return null;
+
+            const navLink = (hash, label) => (
+                <a href={'#'+hash} onClick={() => setPage(hash)}
+                   style={{color: page===hash ? 'var(--primary)' : 'var(--text-muted)', fontWeight: page===hash ? 700 : 500, textDecoration:'none', fontSize:'0.88rem'}}>
+                    {label}
+                </a>
+            );
+
+            const close = () => { window.location.hash = ''; setPage(null); };
+
+            const S = {
+                overlay: { minHeight:'100vh', background:'var(--bg)', fontFamily:'Inter, sans-serif' },
+                header: { background:'var(--surface)', borderBottom:'1px solid var(--border)', padding:'0.75rem 2rem', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:100 },
+                nav: { display:'flex', gap:'1.5rem', alignItems:'center', flexWrap:'wrap' },
+                body: { maxWidth:760, margin:'0 auto', padding:'3rem 1.5rem 5rem' },
+                h1: { fontSize:'1.8rem', fontWeight:800, color:'var(--text)', marginBottom:'0.5rem' },
+                h2: { fontSize:'1.1rem', fontWeight:700, color:'var(--text)', marginTop:'2rem', marginBottom:'0.5rem' },
+                p: { fontSize:'0.92rem', color:'var(--text-muted)', lineHeight:1.7, marginBottom:'0.75rem' },
+                ul: { fontSize:'0.92rem', color:'var(--text-muted)', lineHeight:1.7, paddingLeft:'1.25rem', marginBottom:'0.75rem' },
+                updated: { fontSize:'0.78rem', color:'var(--text-muted)', marginBottom:'2rem' },
+                backBtn: { background:'none', border:'1.5px solid var(--border)', borderRadius:'20px', padding:'0.4rem 1rem', fontFamily:'Inter, sans-serif', fontWeight:600, fontSize:'0.85rem', color:'var(--text)', cursor:'pointer' },
+            };
+
+            const pages = {
+                privacy: (
+                    <>
+                        <h1 style={S.h1}>Privacy Policy</h1>
+                        <p style={S.updated}>Last updated: June 7, 2026</p>
+                        <h2 style={S.h2}>Who we are</h2>
+                        <p style={S.p}>Stompr ("we", "us", "our") is a travel planning platform operated by A&amp;E. We help travelers discover destinations, plan itineraries, and track their adventures. Our registered contact email is <a href="mailto:hello@stompr.app" style={{color:'var(--primary)'}}>hello@stompr.app</a>.</p>
+                        <h2 style={S.h2}>What we collect</h2>
+                        <p style={S.p}>When you create an account we collect:</p>
+                        <ul style={S.ul}>
+                            <li>Name and email address</li>
+                            <li>Date of birth (used for age-appropriate content)</li>
+                            <li>Phone number (optional)</li>
+                            <li>Home city or country</li>
+                            <li>Travel preferences, interests, and budget range</li>
+                            <li>Places you mark as visited or on your bucket list</li>
+                        </ul>
+                        <p style={S.p}>We also collect standard usage data: browser type, device, pages visited, and error logs — used solely to keep the platform running and to fix bugs.</p>
+                        <h2 style={S.h2}>How we use your data</h2>
+                        <ul style={S.ul}>
+                            <li>To provide, personalize, and improve the Stompr service</li>
+                            <li>To power AI travel recommendations (your messages are sent to Anthropic's API — see below)</li>
+                            <li>To send transactional emails (account confirmation, password reset)</li>
+                            <li>We do <strong>not</strong> sell your data to third parties, ever</li>
+                        </ul>
+                        <h2 style={S.h2}>Third-party services we use</h2>
+                        <ul style={S.ul}>
+                            <li><strong>Supabase</strong> — authentication and database hosting (EU/US data centers). <a href="https://supabase.com/privacy" target="_blank" rel="noopener" style={{color:'var(--primary)'}}>Privacy policy</a></li>
+                            <li><strong>Anthropic</strong> — AI responses. Your chat messages are processed by Anthropic's Claude API. <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener" style={{color:'var(--primary)'}}>Privacy policy</a></li>
+                            <li><strong>OpenStreetMap / Nominatim</strong> — place name geocoding (no personal data sent)</li>
+                        </ul>
+                        <h2 style={S.h2}>Data retention</h2>
+                        <p style={S.p}>Your account and associated data are kept for as long as your account is active. You may delete your account at any time from your profile settings, which removes all personally identifiable data within 30 days.</p>
+                        <h2 style={S.h2}>Your rights</h2>
+                        <p style={S.p}>Depending on your location you may have rights under GDPR, CCPA, or similar laws — including the right to access, correct, or delete your data. Email us at <a href="mailto:hello@stompr.app" style={{color:'var(--primary)'}}>hello@stompr.app</a> and we'll respond within 30 days.</p>
+                        <h2 style={S.h2}>Cookies</h2>
+                        <p style={S.p}>We use localStorage to store your session and preferences. We do not use third-party advertising cookies or tracking pixels.</p>
+                        <h2 style={S.h2}>Changes to this policy</h2>
+                        <p style={S.p}>We'll post updates here and notify you by email for material changes. Continued use of Stompr after changes means you accept the updated policy.</p>
+                    </>
+                ),
+                terms: (
+                    <>
+                        <h1 style={S.h1}>Terms of Service</h1>
+                        <p style={S.updated}>Last updated: June 7, 2026</p>
+                        <h2 style={S.h2}>Acceptance</h2>
+                        <p style={S.p}>By using Stompr you agree to these terms. If you don't agree, please don't use the service. You must be at least 13 years old to create an account.</p>
+                        <h2 style={S.h2}>What Stompr is</h2>
+                        <p style={S.p}>Stompr is a travel planning platform that provides AI-generated recommendations, destination tracking, packing lists, and budget tools. AI responses are for informational purposes only — always verify travel advisories, entry requirements, and booking details independently.</p>
+                        <h2 style={S.h2}>Your account</h2>
+                        <ul style={S.ul}>
+                            <li>You're responsible for keeping your password secure</li>
+                            <li>One account per person; sharing accounts is not permitted</li>
+                            <li>Notify us immediately at <a href="mailto:hello@stompr.app" style={{color:'var(--primary)'}}>hello@stompr.app</a> if you suspect unauthorized access</li>
+                        </ul>
+                        <h2 style={S.h2}>Acceptable use</h2>
+                        <p style={S.p}>You agree not to:</p>
+                        <ul style={S.ul}>
+                            <li>Use Stompr to harass, spam, or harm others</li>
+                            <li>Attempt to reverse-engineer, scrape, or overload our systems</li>
+                            <li>Submit false information or impersonate others</li>
+                            <li>Use the AI features to generate harmful, illegal, or deceptive content</li>
+                        </ul>
+                        <h2 style={S.h2}>AI-generated content</h2>
+                        <p style={S.p}>Travel recommendations are generated by AI and may contain errors. Stompr is not responsible for decisions made based on AI output. Always check official government travel advisories and confirm bookings directly with providers.</p>
+                        <h2 style={S.h2}>Credits and fair use</h2>
+                        <p style={S.p}>Free accounts include a daily message limit. We reserve the right to adjust limits to ensure fair access for all users. Automated or bulk use of the AI chat feature is not permitted.</p>
+                        <h2 style={S.h2}>Intellectual property</h2>
+                        <p style={S.p}>The Stompr name, logo, and platform design are owned by us. Content you create (trip notes, place lists) remains yours. You grant us a license to store and display it to power your account.</p>
+                        <h2 style={S.h2}>Limitation of liability</h2>
+                        <p style={S.p}>Stompr is provided "as is." We are not liable for any travel disruptions, losses, or damages arising from use of the platform, including reliance on AI recommendations or third-party booking links.</p>
+                        <h2 style={S.h2}>Termination</h2>
+                        <p style={S.p}>We may suspend or terminate accounts that violate these terms. You may delete your account at any time from your profile settings.</p>
+                        <h2 style={S.h2}>Governing law</h2>
+                        <p style={S.p}>These terms are governed by the laws of the State of Illinois, United States. Disputes will be resolved in the courts of Cook County, IL.</p>
+                        <h2 style={S.h2}>Contact</h2>
+                        <p style={S.p}>Questions about these terms? Email <a href="mailto:hello@stompr.app" style={{color:'var(--primary)'}}>hello@stompr.app</a>.</p>
+                    </>
+                ),
+                contact: (
+                    <>
+                        <h1 style={S.h1}>Contact Us</h1>
+                        <p style={{...S.p, marginBottom:'2rem'}}>We'd love to hear from you — whether it's a question, a bug report, or a partnership inquiry.</p>
+                        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'1.25rem', marginBottom:'2.5rem'}}>
+                            {[
+                                { icon:'✉️', title:'General', desc:'hello@stompr.app', href:'mailto:hello@stompr.app' },
+                                { icon:'🔒', title:'Privacy & Data', desc:'privacy@stompr.app', href:'mailto:privacy@stompr.app' },
+                                { icon:'🏢', title:'Business & Partnerships', desc:'business@stompr.app', href:'mailto:business@stompr.app' },
+                                { icon:'🐞', title:'Report a Bug', desc:'hello@stompr.app', href:'mailto:hello@stompr.app?subject=Bug report' },
+                            ].map(c => (
+                                <a key={c.title} href={c.href} style={{display:'block', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:'1.5rem', textDecoration:'none', transition:'box-shadow 0.2s'}}
+                                   onMouseOver={e => e.currentTarget.style.boxShadow='var(--shadow-md)'}
+                                   onMouseOut={e => e.currentTarget.style.boxShadow='none'}>
+                                    <div style={{fontSize:'1.75rem', marginBottom:'0.5rem'}}>{c.icon}</div>
+                                    <div style={{fontWeight:700, fontSize:'0.95rem', color:'var(--text)', marginBottom:'0.25rem'}}>{c.title}</div>
+                                    <div style={{fontSize:'0.85rem', color:'var(--primary)'}}>{c.desc}</div>
+                                </a>
+                            ))}
+                        </div>
+                        <div style={{background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:'1.75rem'}}>
+                            <div style={{fontWeight:700, fontSize:'1rem', color:'var(--text)', marginBottom:'0.4rem'}}>Response time</div>
+                            <p style={{...S.p, marginBottom:0}}>We typically respond within 1–2 business days. For urgent account issues, email us directly and include your username in the subject line.</p>
+                        </div>
+                    </>
+                ),
+                about: (
+                    <>
+                        <h1 style={S.h1}>About Stompr</h1>
+                        <p style={{...S.p, fontSize:'1.05rem', marginBottom:'2rem'}}>Stompr was built by two people who were tired of juggling spreadsheets, browser tabs, and group chats just to plan a trip.</p>
+                        <h2 style={S.h2}>Our mission</h2>
+                        <p style={S.p}>Make travel planning feel effortless — from the first daydream to the last packing check. We believe the best journeys start with good preparation, and good preparation shouldn't take longer than the trip itself.</p>
+                        <h2 style={S.h2}>What we built</h2>
+                        <ul style={S.ul}>
+                            <li><strong>AI travel agent</strong> — a personalized assistant that remembers your style and gives real recommendations, not generic listicles</li>
+                            <li><strong>Smart packing lists</strong> — tailored to your destination, with health advisories and cultural tips built in</li>
+                            <li><strong>Interactive travel map</strong> — pin where you've been and where you're going</li>
+                            <li><strong>Budget tracking</strong> — keep tabs on spending and split costs with travel companions</li>
+                            <li><strong>B2B widget</strong> — an embeddable AI concierge for travel agencies who want to offer the same experience on their own websites</li>
+                        </ul>
+                        <h2 style={S.h2}>Built with</h2>
+                        <p style={S.p}>Stompr is powered by React, Supabase, Claude (Anthropic), and OpenStreetMap. We're a small team that moves fast and cares deeply about the product.</p>
+                        <h2 style={S.h2}>Get in touch</h2>
+                        <p style={S.p}>We read every email. Reach us at <a href="mailto:hello@stompr.app" style={{color:'var(--primary)'}}>hello@stompr.app</a> or find us on <a href="https://github.com/getstompr" target="_blank" rel="noopener" style={{color:'var(--primary)'}}>GitHub</a>.</p>
+                    </>
+                ),
+            };
+
+            return (
+                <div style={S.overlay}>
+                    <div style={S.header}>
+                        <div style={{display:'flex', alignItems:'center', gap:'1.5rem'}}>
+                            <button style={S.backBtn} onClick={close}>← Back</button>
+                            <nav style={S.nav}>
+                                {navLink('about','About')}
+                                {navLink('privacy','Privacy')}
+                                {navLink('terms','Terms')}
+                                {navLink('contact','Contact')}
+                            </nav>
+                        </div>
+                        <a href="/" onClick={(e)=>{e.preventDefault();close();}} style={{textDecoration:'none'}}>
+                            <img src="Stompr_transparent.png" alt="Stompr" style={{height:32}} />
+                        </a>
+                    </div>
+                    <div style={S.body}>{pages[page]}</div>
+                    <div style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'1.5rem 0 2rem'}}>© {new Date().getFullYear()} Stompr. With love from A&amp;E</div>
+                </div>
+            );
+        }
+
         function App() {
+            const [trustPage, setTrustPage] = useState(getHashPage);
+            useEffect(() => {
+                const handler = () => setTrustPage(getHashPage());
+                window.addEventListener('hashchange', handler);
+                return () => window.removeEventListener('hashchange', handler);
+            }, []);
+
             const [session, setSession] = useState(null);
             const [loading, setLoading] = useState(true);
             const [isSignUp, setIsSignUp] = useState(false);
@@ -1277,6 +1472,8 @@
                 setPlaces(places.filter(place => place.id !== placeId));
             };
 
+            if (trustPage) return <TrustPage />;
+
             if (loading) {
                 return (
                     <div style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '4rem', fontFamily: 'Inter, sans-serif' }}>
@@ -1475,7 +1672,15 @@
                             </>
                         )}
 
-                        <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 1rem'}}>With love from A&amp;E</footer>
+                        <footer style={{textAlign:'center',padding:'1.5rem 1rem 2rem',borderTop:'1px solid var(--border)'}}>
+                            <div style={{display:'flex',justifyContent:'center',gap:'1.5rem',flexWrap:'wrap',marginBottom:'0.75rem'}}>
+                                {[['#about','About'],['#privacy','Privacy Policy'],['#terms','Terms of Service'],['#contact','Contact']].map(([href,label]) => (
+                                    <a key={href} href={href} style={{fontSize:'0.82rem',color:'var(--text-muted)',textDecoration:'none',fontWeight:500}}
+                                       onMouseOver={e=>e.target.style.color='var(--primary)'} onMouseOut={e=>e.target.style.color='var(--text-muted)'}>{label}</a>
+                                ))}
+                            </div>
+                            <div style={{fontSize:'0.72rem',color:'#bbb'}}>© {new Date().getFullYear()} Stompr · With love from A&amp;E</div>
+                        </footer>
                     </div>
                 );
             }
