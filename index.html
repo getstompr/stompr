@@ -1083,6 +1083,7 @@
             const [activeTab, setActiveTab] = useState(() => {
                 try { return localStorage.getItem('stompr_active_tab') || 'ai'; } catch { return 'ai'; }
             });
+            const [landingTab, setLandingTab] = useState('b2c');
             const [places, setPlaces] = useState([]);
             const [profile, setProfile] = useState(null);
             const [profilePic, setProfilePic] = useState('');
@@ -1316,34 +1317,163 @@
                             </div>
                         </div>
 
-                        {/* ── Features ── */}
-                        <div style={{maxWidth:'900px', margin:'0 auto', padding:'2rem 1.5rem 4rem'}}>
-                            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'1.5rem'}}>
-                                {[
-                                    { icon:'🤖', title:'Personal AI Agent', desc:'An assistant that learns your style, remembers your trips, and gives tailored recommendations.' },
-                                    { icon:'🧳', title:'Smart Packing Lists', desc:'Country-specific lists with government health alerts, CDC warnings, and cultural tips.' },
-                                    { icon:'💰', title:'Budget & Expenses', desc:'Track personal spending and split group costs with Venmo and Zelle integration.' },
-                                    { icon:'🗺️', title:'Interactive Maps', desc:'Search destinations, pin your bucket list, and see your travels on a live map.' },
-                                    { icon:'📋', title:'Bucket List', desc:'Build your dream travel list and mark places as visited as you go.' },
-                                    { icon:'🔒', title:'Private & Secure', desc:'Your data stays yours. Everything syncs securely with your account.' },
-                                ].map(f => (
-                                    <div key={f.title} style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'16px', padding:'1.5rem', textAlign:'center'}}>
-                                        <div style={{fontSize:'2rem', marginBottom:'0.75rem'}}>{f.icon}</div>
-                                        <div style={{fontWeight:'700', fontSize:'1rem', color:'var(--text)', marginBottom:'0.4rem'}}>{f.title}</div>
-                                        <p style={{fontSize:'0.85rem', color:'var(--text-muted)', lineHeight:'1.55', margin:0}}>{f.desc}</p>
-                                    </div>
-                                ))}
+                        {/* ── B2C / B2B Toggle ── */}
+                        <div style={{display:'flex', justifyContent:'center', marginBottom:'3rem', padding:'0 1.5rem'}}>
+                            <div style={{display:'inline-flex', background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'32px', padding:'4px', gap:'4px'}}>
+                                <button
+                                    onClick={() => setLandingTab('b2c')}
+                                    style={{padding:'0.55rem 1.5rem', borderRadius:'28px', border:'none', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.9rem', cursor:'pointer', transition:'all 0.2s',
+                                        background: landingTab==='b2c' ? 'var(--surface)' : 'transparent',
+                                        color: landingTab==='b2c' ? 'var(--primary)' : 'var(--text-muted)',
+                                        boxShadow: landingTab==='b2c' ? 'var(--shadow-sm)' : 'none'}}>
+                                    ✈️ For Travelers
+                                </button>
+                                <button
+                                    onClick={() => setLandingTab('b2b')}
+                                    style={{padding:'0.55rem 1.5rem', borderRadius:'28px', border:'none', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.9rem', cursor:'pointer', transition:'all 0.2s',
+                                        background: landingTab==='b2b' ? 'var(--surface)' : 'transparent',
+                                        color: landingTab==='b2b' ? 'var(--primary)' : 'var(--text-muted)',
+                                        boxShadow: landingTab==='b2b' ? 'var(--shadow-sm)' : 'none'}}>
+                                    🏢 For Travel Agents
+                                </button>
                             </div>
                         </div>
 
-                        {/* ── Bottom CTA ── */}
-                        <div style={{textAlign:'center', padding:'2rem 1.5rem 3rem', borderTop:'1px solid var(--border)'}}>
-                            <h2 style={{fontSize:'1.5rem', fontWeight:'800', color:'var(--text)', marginBottom:'0.75rem'}}>Ready to plan your next adventure?</h2>
-                            <p style={{color:'var(--text-muted)', fontSize:'0.95rem', marginBottom:'1.5rem'}}>Join Stompr today — no credit card required.</p>
-                            <button onClick={() => { setShowLanding(false); setIsSignUp(true); }} className="btn btn-primary" style={{borderRadius:'28px', padding:'0.85rem 2.5rem', fontSize:'1.05rem', fontWeight:'700'}}>
-                                Create Free Account
-                            </button>
-                        </div>
+                        {/* ── B2C: Features ── */}
+                        {landingTab === 'b2c' && (
+                            <>
+                                <div style={{maxWidth:'900px', margin:'0 auto', padding:'0 1.5rem 4rem'}}>
+                                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'1.5rem'}}>
+                                        {[
+                                            { icon:'🤖', title:'Personal AI Agent', desc:'An assistant that learns your style, remembers your trips, and gives tailored recommendations.' },
+                                            { icon:'🧳', title:'Smart Packing Lists', desc:'Country-specific lists with government health alerts, CDC warnings, and cultural tips.' },
+                                            { icon:'💰', title:'Budget & Expenses', desc:'Track personal spending and split group costs with Venmo and Zelle integration.' },
+                                            { icon:'🗺️', title:'Interactive Maps', desc:'Search destinations, pin your bucket list, and see your travels on a live map.' },
+                                            { icon:'📋', title:'Bucket List', desc:'Build your dream travel list and mark places as visited as you go.' },
+                                            { icon:'🔒', title:'Private & Secure', desc:'Your data stays yours. Everything syncs securely with your account.' },
+                                        ].map(f => (
+                                            <div key={f.title} style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'16px', padding:'1.5rem', textAlign:'center'}}>
+                                                <div style={{fontSize:'2rem', marginBottom:'0.75rem'}}>{f.icon}</div>
+                                                <div style={{fontWeight:'700', fontSize:'1rem', color:'var(--text)', marginBottom:'0.4rem'}}>{f.title}</div>
+                                                <p style={{fontSize:'0.85rem', color:'var(--text-muted)', lineHeight:'1.55', margin:0}}>{f.desc}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div style={{textAlign:'center', padding:'2rem 1.5rem 3rem', borderTop:'1px solid var(--border)'}}>
+                                    <h2 style={{fontSize:'1.5rem', fontWeight:'800', color:'var(--text)', marginBottom:'0.75rem'}}>Ready to plan your next adventure?</h2>
+                                    <p style={{color:'var(--text-muted)', fontSize:'0.95rem', marginBottom:'1.5rem'}}>Join Stompr today — no credit card required.</p>
+                                    <button onClick={() => { setShowLanding(false); setIsSignUp(true); }} className="btn btn-primary" style={{borderRadius:'28px', padding:'0.85rem 2.5rem', fontSize:'1.05rem', fontWeight:'700'}}>
+                                        Create Free Account
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        {/* ── B2B: Travel Agent Widget ── */}
+                        {landingTab === 'b2b' && (
+                            <>
+                                {/* Value prop */}
+                                <div style={{textAlign:'center', maxWidth:'620px', margin:'0 auto', padding:'0 1.5rem 2.5rem'}}>
+                                    <h2 style={{fontSize:'clamp(1.4rem, 3.5vw, 2rem)', fontWeight:'800', color:'var(--text)', marginBottom:'0.75rem', lineHeight:'1.2'}}>
+                                        Add an AI travel concierge to your website — in minutes.
+                                    </h2>
+                                    <p style={{fontSize:'1rem', color:'var(--text-muted)', lineHeight:'1.65', margin:0}}>
+                                        Stompr's embeddable widget answers customer questions 24/7, captures leads, and books more trips — powered by the same AI platform your clients use.
+                                    </p>
+                                </div>
+
+                                {/* Feature grid */}
+                                <div style={{maxWidth:'900px', margin:'0 auto', padding:'0 1.5rem 3rem'}}>
+                                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'1.5rem', marginBottom:'3rem'}}>
+                                        {[
+                                            { icon:'💬', title:'24/7 AI Concierge', desc:'Handles destination questions, itinerary ideas, and booking inquiries around the clock — no extra staff needed.' },
+                                            { icon:'🎨', title:'Fully Branded', desc:'Match your agency\'s colors and voice. The widget lives on your site and feels like a natural part of your brand.' },
+                                            { icon:'📥', title:'Lead Capture', desc:'Every conversation collects contact info and travel intent, feeding straight into your CRM.' },
+                                            { icon:'📊', title:'Analytics Dashboard', desc:'See which destinations get the most questions, conversion rates, and where travelers drop off.' },
+                                            { icon:'⚡', title:'One-Line Install', desc:'Drop a single script tag into your site. No developer needed. Works on any platform.' },
+                                            { icon:'🔐', title:'Enterprise Security', desc:'Per-site token auth, PII redaction, and rate limiting built in. SOC 2 ready.' },
+                                        ].map(f => (
+                                            <div key={f.title} style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'16px', padding:'1.5rem', textAlign:'center'}}>
+                                                <div style={{fontSize:'2rem', marginBottom:'0.75rem'}}>{f.icon}</div>
+                                                <div style={{fontWeight:'700', fontSize:'1rem', color:'var(--text)', marginBottom:'0.4rem'}}>{f.title}</div>
+                                                <p style={{fontSize:'0.85rem', color:'var(--text-muted)', lineHeight:'1.55', margin:0}}>{f.desc}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Install snippet */}
+                                    <div style={{background:'#0F172A', borderRadius:'16px', padding:'1.75rem', marginBottom:'3rem', border:'1px solid rgba(255,255,255,0.07)'}}>
+                                        <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'1rem'}}>
+                                            <div style={{width:'12px', height:'12px', borderRadius:'50%', background:'#EF4444'}} />
+                                            <div style={{width:'12px', height:'12px', borderRadius:'50%', background:'#F59E0B'}} />
+                                            <div style={{width:'12px', height:'12px', borderRadius:'50%', background:'#22C55E'}} />
+                                            <span style={{marginLeft:'0.5rem', fontSize:'0.78rem', color:'rgba(255,255,255,0.3)', fontFamily:'monospace'}}>your-site.html</span>
+                                        </div>
+                                        <pre style={{margin:0, fontFamily:"'Courier New', monospace", fontSize:'0.82rem', lineHeight:'1.7', color:'#94A3B8', overflowX:'auto', whiteSpace:'pre-wrap', wordBreak:'break-all'}}>
+{`<script
+  src="https://widget.stompr.app/v1.js"
+  data-tenant-id="YOUR_TENANT_ID"
+  data-widget-token="YOUR_TOKEN"
+  data-brand-name="My Travel Agency"
+  data-accent="#0EA5E9"
+  async
+></script>`}
+                                        </pre>
+                                        <p style={{margin:'1rem 0 0', fontSize:'0.8rem', color:'rgba(255,255,255,0.3)'}}>Your tenant ID and token are provided after purchase.</p>
+                                    </div>
+
+                                    {/* Pricing tiers */}
+                                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:'1.25rem', marginBottom:'2.5rem'}}>
+                                        {[
+                                            { name:'Starter', price:'$49', period:'/mo', desc:'Perfect for independent agents', features:['1 website', 'Up to 500 conversations/mo', 'Lead capture + email export', 'Standard branding'] },
+                                            { name:'Agency', price:'$149', period:'/mo', desc:'For growing agencies', features:['Up to 5 websites', 'Unlimited conversations', 'CRM integration', 'Custom branding', 'Analytics dashboard'], highlight: true },
+                                            { name:'Enterprise', price:'Custom', period:'', desc:'Large-scale deployments', features:['Unlimited sites', 'SLA & priority support', 'SSO & advanced security', 'Dedicated onboarding'] },
+                                        ].map(plan => (
+                                            <div key={plan.name} style={{
+                                                background: plan.highlight ? 'var(--primary)' : 'var(--surface)',
+                                                border: plan.highlight ? 'none' : '1px solid var(--border)',
+                                                borderRadius:'16px', padding:'1.75rem',
+                                                boxShadow: plan.highlight ? '0 8px 32px rgba(14,165,233,0.3)' : 'none',
+                                            }}>
+                                                <div style={{fontWeight:'800', fontSize:'1rem', color: plan.highlight ? '#fff' : 'var(--text)', marginBottom:'0.25rem'}}>{plan.name}</div>
+                                                <div style={{fontSize:'0.82rem', color: plan.highlight ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)', marginBottom:'1rem'}}>{plan.desc}</div>
+                                                <div style={{display:'flex', alignItems:'baseline', gap:'2px', marginBottom:'1.25rem'}}>
+                                                    <span style={{fontSize:'2rem', fontWeight:'800', color: plan.highlight ? '#fff' : 'var(--text)'}}>{plan.price}</span>
+                                                    <span style={{fontSize:'0.9rem', color: plan.highlight ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)'}}>{plan.period}</span>
+                                                </div>
+                                                <ul style={{listStyle:'none', padding:0, margin:'0 0 1.5rem', display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+                                                    {plan.features.map(f => (
+                                                        <li key={f} style={{fontSize:'0.85rem', color: plan.highlight ? 'rgba(255,255,255,0.9)' : 'var(--text-muted)', display:'flex', gap:'0.5rem', alignItems:'flex-start'}}>
+                                                            <span style={{color: plan.highlight ? '#fff' : 'var(--success)', flexShrink:0}}>✓</span>{f}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                                <button style={{width:'100%', padding:'0.7rem', borderRadius:'10px', border: plan.highlight ? '2px solid rgba(255,255,255,0.4)' : '1.5px solid var(--primary)', background: plan.highlight ? 'rgba(255,255,255,0.15)' : 'transparent', color: plan.highlight ? '#fff' : 'var(--primary)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.9rem', cursor:'pointer', transition:'all 0.2s'}}
+                                                    onMouseOver={e => { e.target.style.background = plan.highlight ? 'rgba(255,255,255,0.25)' : 'var(--primary)'; if(!plan.highlight) e.target.style.color='#fff'; }}
+                                                    onMouseOut={e => { e.target.style.background = plan.highlight ? 'rgba(255,255,255,0.15)' : 'transparent'; if(!plan.highlight) e.target.style.color='var(--primary)'; }}>
+                                                    {plan.name === 'Enterprise' ? 'Contact Sales' : 'Get Started'}
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* B2B CTA */}
+                                <div style={{textAlign:'center', padding:'2rem 1.5rem 3rem', borderTop:'1px solid var(--border)'}}>
+                                    <h2 style={{fontSize:'1.5rem', fontWeight:'800', color:'var(--text)', marginBottom:'0.75rem'}}>Ready to upgrade your agency?</h2>
+                                    <p style={{color:'var(--text-muted)', fontSize:'0.95rem', marginBottom:'1.5rem'}}>Get set up in under 10 minutes. No technical expertise needed.</p>
+                                    <div style={{display:'flex', gap:'1rem', justifyContent:'center', flexWrap:'wrap'}}>
+                                        <button className="btn btn-primary" style={{borderRadius:'28px', padding:'0.85rem 2.5rem', fontSize:'1.05rem', fontWeight:'700'}}>
+                                            Start Free Trial
+                                        </button>
+                                        <button style={{borderRadius:'28px', padding:'0.85rem 2rem', fontSize:'1.05rem', fontWeight:'600', background:'none', border:'2px solid var(--border)', color:'var(--text)', cursor:'pointer', fontFamily:'Inter, sans-serif'}}>
+                                            Book a Demo
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
 
                         <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 1rem'}}>With love from A&amp;E</footer>
                     </div>
