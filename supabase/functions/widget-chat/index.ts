@@ -7,6 +7,18 @@ const MONTHLY_LIMITS: Record<string, number | null> = {
   enterprise: null,
 }
 
+const RATE_LIMIT_PER_MINUTE = 10
+
+// Prefer Cloudflare's header when present, then standard proxy headers.
+function getClientIp(req: Request): string {
+  return (
+    req.headers.get('cf-connecting-ip') ||
+    req.headers.get('x-real-ip') ||
+    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+    'unknown'
+  )
+}
+
 // Build CORS headers, respecting the tenant's allowed_origins list.
 function corsHeaders(req: Request, allowedOrigins: string[] | null): Record<string, string> {
   const origin = req.headers.get('origin') || '*'
@@ -39,17 +51,34 @@ serve(async (req) => {
     return json({ error: 'Method not allowed' }, 405)
   }
 
+  // ── IP rate limit (checked before token auth to block bots early) ──────────
+  const clientIp = getClientIp(req)
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  )
+
+  if (clientIp !== 'unknown') {
+    const { data: reqCount, error: rlErr } = await supabase
+      .rpc('check_widget_rate_limit', { p_ip: clientIp })
+
+    if (rlErr) {
+      console.error('Rate limit check failed:', rlErr.message)
+      // Fail open — don't block legitimate users if the DB call errors
+    } else if (reqCount > RATE_LIMIT_PER_MINUTE) {
+      return json(
+        { error: 'Too many requests. Please wait a moment and try again.' },
+        429,
+        { 'Retry-After': '60', ...corsHeaders(req, null) },
+      )
+    }
+  }
+
   // ── Auth: widget token from header ─────────────────────────────────────────
   const widgetToken = req.headers.get('x-widget-token')
   if (!widgetToken) {
     return json({ error: 'Missing x-widget-token header' }, 401)
   }
-
-  // ── Supabase service-role client (bypasses RLS) ────────────────────────────
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  )
 
   // ── Validate token + load tenant ───────────────────────────────────────────
   const { data: tokenRow, error: tokenErr } = await supabase
