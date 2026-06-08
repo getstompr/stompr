@@ -35,3 +35,6 @@ begin
   return v_count;
 end;
 $$;
+
+-- Allow the service role (used by Edge Functions) to call this function
+grant execute on function check_widget_rate_limit(text) to service_role;
