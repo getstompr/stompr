@@ -2138,7 +2138,6 @@
                         <div className="tabs">
                             <button className={`tab ${activeTab === 'ai' ? 'active' : ''}`} onClick={() => setActiveTab('ai')}>AI Travel Assistant</button>
                             <button className={`tab ${activeTab === 'itinerary' ? 'active' : ''}`} onClick={() => setActiveTab('itinerary')}>Itinerary</button>
-                            <button className={`tab ${activeTab === 'packing' ? 'active' : ''}`} onClick={() => setActiveTab('packing')}>Packing Lists</button>
                             <button className={`tab ${activeTab === 'places' ? 'active' : ''}`} onClick={() => setActiveTab('places')}>Bucket List & Visited</button>
                             <button className={`tab ${activeTab === 'community' ? 'active' : ''}`} onClick={() => setActiveTab('community')}>Community</button>
                         </div>
@@ -2152,10 +2151,6 @@
                             </div>
 
                             <div key={activeTab} className="tab-content-enter">
-                            {activeTab === 'packing' && (
-                                <PresetPackingView />
-                            )}
-
                             {activeTab === 'places' && (
                                 <PlacesView
                                     places={places}
@@ -4488,6 +4483,9 @@ ${buildTripContext(active)}`;
             const [packInput,      setPackInput]      = useState({ text:'', category:'Clothing' });
             const [packGenLoad,    setPackGenLoad]    = useState(false);
             const [baselineSaving, setBaselineSaving] = useState(false);
+            const [packEnv,        setPackEnv]        = useState('');
+            const [showAdvisories, setShowAdvisories] = useState(true);
+            const [showSmartSugg,  setShowSmartSugg]  = useState(false);
             const [budgetSubTab,      setBudgetSubTab]       = useState('personal');
             const [budgetSuggestLoad, setBudgetSuggestLoad] = useState(false);
             const [sharedExp,         setSharedExp]         = useState(itinerary.shared_expenses || { travelers: [], logs: [], currency: budget.currency || 'USD', payment_handles: {} });
@@ -4771,12 +4769,42 @@ ${buildTripContext(active)}`;
                 persistPack([...packingItems, { id: Date.now().toString(36)+Math.random().toString(36).slice(2), text: packInput.text.trim(), category: packInput.category, checked: false }]);
                 setPackInput(prev => ({ ...prev, text:'' }));
             };
+
+            // Detect country from destination string (e.g. "Paris, France" → "France")
+            const packCountry = (() => {
+                if (!itinerary.destination) return null;
+                const parts = itinerary.destination.split(/,\s*/);
+                for (const part of [...parts].reverse()) {
+                    if (ALL_COUNTRIES.includes(part.trim())) return part.trim();
+                }
+                return null;
+            })();
+
+            // Smart suggestions based on detected country or selected environment
+            const PACK_CAT_MAP = { 'Documents':'Documents', 'Clothing':'Clothing', 'Toiletries':'Toiletries', 'Electronics':'Electronics', 'Health & Medical':'Health', 'Money':'Other', 'Miscellaneous':'Other' };
+            const packSmartCats = packEnv && PACKING_DATA[packEnv] ? PACKING_DATA[packEnv].categories : (packCountry ? getCountryPackingCategories(packCountry) : PACKING_DATA.generic.categories);
+
+            const addPackSugg = (text, catName) => {
+                if (packingItems.some(p => p.text.toLowerCase() === text.toLowerCase())) return;
+                persistPack([...packingItems, { id: Date.now().toString(36)+Math.random().toString(36).slice(2), text, category: PACK_CAT_MAP[catName]||'Other', checked: false }]);
+            };
+
+            const addAllPackSugg = () => {
+                const existing = new Set(packingItems.map(p => p.text.toLowerCase()));
+                const toAdd = packSmartCats.flatMap(c =>
+                    c.items.filter(item => !existing.has(item.toLowerCase()))
+                           .map(text => ({ id: Date.now().toString(36)+Math.random().toString(36).slice(2), text, category: PACK_CAT_MAP[c.name]||'Other', checked: false }))
+                );
+                if (toAdd.length) persistPack([...packingItems, ...toAdd]);
+            };
+
             const generatePacking = async () => {
                 setPackGenLoad(true);
                 const desc = `${itinerary.travelers}-person ${(itinerary.trip_types||[]).join('/')||''} trip to ${itinerary.destination||'unknown'}, ${days.length} days`;
+                const climateHint = packCountry && COUNTRY_SPECIFICS[packCountry]?.climate ? `, ${COUNTRY_SPECIFICS[packCountry].climate} climate` : '';
                 try {
                     const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
-                        body: { message: `Generate a packing list for: ${desc}.`, systemPrompt: `You are a travel packing expert. Respond ONLY with valid JSON — a raw array. Each element: { "category": "Documents"|"Clothing"|"Toiletries"|"Electronics"|"Health"|"Activities"|"Other", "text": string }. Include 20-25 essential items.`, history: [] }
+                        body: { message: `Generate a destination-specific packing list for: ${desc}${climateHint}.`, systemPrompt: `You are a travel packing expert. Respond ONLY with valid JSON — a raw array. Each element: { "category": "Documents"|"Clothing"|"Toiletries"|"Electronics"|"Health"|"Activities"|"Other", "text": string }. Include 20-25 essential items tailored to the specific destination, climate, and trip type. Consider local weather, cultural dress codes, and destination-specific health requirements.`, history: [] }
                     });
                     if (!fnErr && !data?.error) {
                         let raw = (data.message || '').replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
@@ -5565,6 +5593,7 @@ ${buildTripContext(active)}`;
                     {/* ── PACKING TAB ── */}
                     {builderTab === 'packing' && (
                         <div>
+                            {/* Progress + actions */}
                             <div className="category-block" style={{marginBottom:'1rem'}}>
                                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'0.4rem', marginBottom: packingItems.length > 0 ? '0.6rem' : 0}}>
                                     <div style={{fontWeight:'700', fontSize:'0.9rem', color:'var(--text)'}}>
@@ -5584,6 +5613,74 @@ ${buildTripContext(active)}`;
                                 )}
                             </div>
 
+                            {/* Destination advisories — shown when a country is detected from the destination */}
+                            {packCountry && (
+                                <div className="category-block" style={{marginBottom:'1rem'}}>
+                                    {sectionHeader(`🌍 ${packCountry} Advisories`, showAdvisories, () => setShowAdvisories(v => !v))}
+                                    {showAdvisories && (() => {
+                                        const sp = COUNTRY_SPECIFICS[packCountry] || {};
+                                        const stateSlug = sp.stateSlug || packCountry.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z-]/g, '');
+                                        const cdcSlug   = sp.cdcSlug   || packCountry.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z-]/g, '');
+                                        return (
+                                            <div>
+                                                {sp.culturalNotes && (
+                                                    <div style={{background:'#FFF8E7', border:'1.5px solid #FDE68A', borderRadius:'var(--radius)', padding:'0.75rem 1rem', marginBottom:'0.75rem', fontSize:'0.85rem', color:'#78350F', lineHeight:'1.6'}}>
+                                                        <strong>✈️ Cultural notes:</strong> {sp.culturalNotes}
+                                                    </div>
+                                                )}
+                                                <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+                                                    <a href={`https://travel.state.gov/content/travel/en/traveladvisories/traveladvisories/${stateSlug}-travel-advisory.html`} target="_blank" rel="noopener noreferrer" className="gov-link-btn" style={{width:'fit-content'}}>🇺🇸 US State Dept Advisory →</a>
+                                                    <a href={`https://wwwnc.cdc.gov/travel/destinations/traveler/none/${cdcSlug}`} target="_blank" rel="noopener noreferrer" className="gov-link-btn" style={{width:'fit-content'}}>🏥 CDC Health Recommendations →</a>
+                                                    <a href="https://step.state.gov/" target="_blank" rel="noopener noreferrer" className="gov-link-btn" style={{background:'var(--primary)', width:'fit-content'}}>📋 Enroll in STEP →</a>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+
+                            {/* Smart suggestions */}
+                            <div className="category-block" style={{marginBottom:'1rem'}}>
+                                {sectionHeader('🧳 Smart Suggestions', showSmartSugg, () => setShowSmartSugg(v => !v))}
+                                {showSmartSugg && (
+                                    <div>
+                                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem', flexWrap:'wrap', gap:'0.5rem'}}>
+                                            <div style={{display:'flex', gap:'0.4rem', flexWrap:'wrap'}}>
+                                                <button onClick={() => setPackEnv('')}
+                                                    style={{padding:'0.28rem 0.7rem', borderRadius:'999px', border: packEnv==='' ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: packEnv==='' ? 'rgba(14,165,233,0.1)' : 'transparent', color: packEnv==='' ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.75rem', cursor:'pointer'}}>
+                                                    🌍 {packCountry || 'General'}
+                                                </button>
+                                                {Object.entries(PACKING_DATA).map(([key, val]) => (
+                                                    <button key={key} onClick={() => setPackEnv(key)}
+                                                        style={{padding:'0.28rem 0.7rem', borderRadius:'999px', border: packEnv===key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: packEnv===key ? 'rgba(14,165,233,0.1)' : 'transparent', color: packEnv===key ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.75rem', cursor:'pointer'}}>
+                                                        {val.emoji} {val.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <button className="btn" style={{fontSize:'0.75rem', padding:'0.25rem 0.65rem', flexShrink:0}} onClick={addAllPackSugg}>+ Add all</button>
+                                        </div>
+                                        {packSmartCats.map((cat, ci) => (
+                                            <div key={ci} style={{marginBottom:'0.6rem'}}>
+                                                <div style={{fontWeight:'700', fontSize:'0.78rem', textTransform:'uppercase', letterSpacing:'0.06em', color: cat.medical ? '#B45309' : 'var(--text-muted)', marginBottom:'0.35rem'}}>{cat.medical ? '🩺 ' : ''}{cat.name}</div>
+                                                {cat.items.map((item, ii) => {
+                                                    const already = packingItems.some(p => p.text.toLowerCase() === item.toLowerCase());
+                                                    return (
+                                                        <div key={ii} style={{display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.22rem 0', borderBottom: ii < cat.items.length - 1 ? '1px solid var(--border)' : 'none'}}>
+                                                            <span style={{flex:1, fontSize:'0.84rem', color: already ? 'var(--text-muted)' : 'var(--text)', textDecoration: already ? 'line-through' : 'none'}}>{item}</span>
+                                                            <button onClick={() => addPackSugg(item, cat.name)} disabled={already}
+                                                                style={{background:'none', border:'1px solid var(--border)', borderRadius:'5px', color: already ? 'var(--text-muted)' : 'var(--primary)', fontSize:'0.7rem', padding:'0.08rem 0.38rem', cursor: already ? 'default' : 'pointer', fontWeight:'700', opacity: already ? 0.45 : 1}}>
+                                                                {already ? '✓' : '+'}
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Add item form */}
                             <div className="category-block" style={{marginBottom:'1rem', display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap'}}>
                                 <input type="text" value={packInput.text} onChange={e => setPackInput({...packInput, text: e.target.value})}
                                     onKeyDown={e => e.key === 'Enter' && addPackItem()}
@@ -5598,7 +5695,7 @@ ${buildTripContext(active)}`;
                                 <div style={{textAlign:'center', padding:'2rem 1rem', color:'var(--text-muted)'}}>
                                     <div style={{fontSize:'2rem', marginBottom:'0.5rem'}}>🧳</div>
                                     <p style={{fontWeight:'500', marginBottom:'0.35rem'}}>No packing list yet.</p>
-                                    <p style={{fontSize:'0.85rem'}}>Click "✨ AI Generate" for suggestions, or add items manually.</p>
+                                    <p style={{fontSize:'0.85rem'}}>Use Smart Suggestions above, click "✨ AI Generate", or add items manually.</p>
                                 </div>
                             )}
 
