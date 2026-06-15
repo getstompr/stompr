@@ -1336,18 +1336,24 @@
             }, [activeTab]);
 
             const initialLoadRef = React.useRef(true);
+            const lastUserIdRef = React.useRef(null);
             useEffect(() => {
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
                     setSession(session);
                     setLoading(false);
+                    lastUserIdRef.current = session?.user?.id ?? null;
                     // After initial load, any future SIGNED_IN is a fresh login
                     setTimeout(() => { initialLoadRef.current = false; }, 500);
                 });
                 const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
                     setSession(session);
-                    if (event === 'SIGNED_IN' && !initialLoadRef.current) {
+                    const newUserId = session?.user?.id ?? null;
+                    // Switching browser tabs can re-fire SIGNED_IN for the same user
+                    // (token refresh on focus) — only reset the tab on an actual new login.
+                    if (event === 'SIGNED_IN' && !initialLoadRef.current && newUserId !== lastUserIdRef.current) {
                         setActiveTab('ai');
                     }
+                    lastUserIdRef.current = newUserId;
                 });
                 return () => subscription.unsubscribe();
             }, []);
