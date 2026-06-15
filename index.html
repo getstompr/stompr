@@ -4461,6 +4461,12 @@ ${buildTripContext(active)}`;
             const [budgetSubTab,      setBudgetSubTab]       = useState('personal');
             const [budgetSuggestLoad, setBudgetSuggestLoad] = useState(false);
             const [sharedExp,         setSharedExp]         = useState(itinerary.shared_expenses || { travelers: [], logs: [], currency: budget.currency || 'USD', payment_handles: {} });
+            const [transport,      setTransport]      = useState(itinerary.transport || []);
+            const [lodging,        setLodging]        = useState(itinerary.lodging || []);
+            const [addingTransport,setAddingTransport]= useState(false);
+            const [transportForm,  setTransportForm]  = useState({ type:'flight', date:'', from:'', to:'', departure_time:'', arrival_time:'', arrival_date:'', carrier:'', reference:'', notes:'' });
+            const [addingLodging,  setAddingLodging]  = useState(false);
+            const [lodgingForm,    setLodgingForm]    = useState({ name:'', address:'', check_in_date:'', check_in_time:'15:00', check_out_date:'', check_out_time:'11:00', confirmation:'', notes:'' });
             const [shareOpen,      setShareOpen]      = useState(false);
             const [shareEmail,     setShareEmail]     = useState('');
             const [sharePermission,setSharePermission]= useState('view');
@@ -4490,6 +4496,8 @@ ${buildTripContext(active)}`;
                 setBudget(itinerary.budget || { total:'', currency:'USD' });
                 setExpenses(itinerary.expenses || []);
                 setSharedExp(itinerary.shared_expenses || { travelers: [], logs: [], currency: (itinerary.budget || {}).currency || 'USD', payment_handles: {} });
+                setTransport(itinerary.transport || []);
+                setLodging(itinerary.lodging || []);
                 setSuggestions([]);
             }, [itinerary.id]);
 
@@ -4560,11 +4568,13 @@ ${buildTripContext(active)}`;
                 else if (bounds.length === 1) mapObj.current.setView(bounds[0], 12);
             }, [days]);
 
-            const persist       = (nd)    => { setDays(nd);          onUpdateItinerary({ days: nd }); };
-            const persistPack   = (items) => { setPackingItems(items); onUpdateItinerary({ packing_list: items }); };
-            const persistBudget = (b)     => { setBudget(b);           onUpdateItinerary({ budget: b }); };
-            const persistExp    = (exps)  => { setExpenses(exps);      onUpdateItinerary({ expenses: exps }); };
-            const persistShared = (sd)   => { setSharedExp(sd);        onUpdateItinerary({ shared_expenses: sd }); };
+            const persist          = (nd)  => { setDays(nd);          onUpdateItinerary({ days: nd }); };
+            const persistPack      = (items)=>{ setPackingItems(items); onUpdateItinerary({ packing_list: items }); };
+            const persistBudget    = (b)   => { setBudget(b);           onUpdateItinerary({ budget: b }); };
+            const persistExp       = (exps)=> { setExpenses(exps);      onUpdateItinerary({ expenses: exps }); };
+            const persistShared    = (sd)  => { setSharedExp(sd);       onUpdateItinerary({ shared_expenses: sd }); };
+            const persistTransport = (t)   => { setTransport(t);        onUpdateItinerary({ transport: t }); };
+            const persistLodging   = (l)   => { setLodging(l);          onUpdateItinerary({ lodging: l }); };
 
             const addItemDirect = async (date, itemData) => {
                 const item = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), ...itemData };
@@ -4750,9 +4760,33 @@ ${buildTripContext(active)}`;
             };
             const removeExp = (id) => persistExp(expenses.filter(e => e.id !== id));
 
-            // ── Trip Essentials ──
-            const hasType = (date, ...cats) => days.find(d => d.date === date)?.items.some(i => cats.includes(i.category));
-            const quickAdd = (date, cat, title) => { setAddingFor(date); setForm({ time:'', title, category: cat, notes:'' }); };
+            // ── Virtual items merged from transport/lodging into schedule ──
+            const TRANSPORT_EMOJI = { flight:'✈️', train:'🚂', bus:'🚌', car:'🚗', ferry:'⛴️', other:'🚌' };
+            const getVirtualItems = (dayDate) => {
+                const items = [];
+                transport.forEach(t => {
+                    if (t.date === dayDate) {
+                        const emoji = TRANSPORT_EMOJI[t.type] || '🚌';
+                        items.push({ id:`__t_${t.id}`, _virtual:true, _source:'transport', _sourceId:t.id,
+                            time: t.departure_time||'', end_time: t.arrival_time||'',
+                            title:`${emoji} ${t.from||'?'} → ${t.to||'?'}${t.carrier ? ` · ${t.carrier}` : ''}`,
+                            category:'transport', notes: t.reference ? `Ref: ${t.reference}${t.notes ? ' · '+t.notes : ''}` : (t.notes||'') });
+                    }
+                });
+                lodging.forEach(l => {
+                    if (l.check_in_date === dayDate)
+                        items.push({ id:`__li_${l.id}`, _virtual:true, _source:'lodging', _sourceId:l.id,
+                            time: l.check_in_time||'', end_time:'',
+                            title:`🏨 Check-in: ${l.name||'Accommodation'}`,
+                            category:'lodging', notes: l.confirmation ? `Conf: ${l.confirmation}${l.notes ? ' · '+l.notes : ''}` : (l.notes||'') });
+                    if (l.check_out_date === dayDate)
+                        items.push({ id:`__lo_${l.id}`, _virtual:true, _source:'lodging', _sourceId:l.id,
+                            time: l.check_out_time||'', end_time:'',
+                            title:`🏨 Check-out: ${l.name||'Accommodation'}`,
+                            category:'lodging', notes: l.confirmation ? `Conf: ${l.confirmation}` : (l.notes||'') });
+                });
+                return items;
+            };
 
             const catInfo = (val) => categories.find(c => c.value === val) || categories[categories.length - 1];
             const firstDate = days[0]?.date;
@@ -4926,7 +4960,7 @@ ${buildTripContext(active)}`;
 
                     {/* Sub-tabs */}
                     <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.25rem', flexWrap:'wrap'}}>
-                        {[['schedule','🗓️ Schedule'], ['packing','🧳 Packing'], ['budget','💰 Budget']].map(([key, label]) => (
+                        {[['schedule','🗓️ Schedule'], ['transport','✈️ Transport'], ['lodging','🏨 Lodging'], ['packing','🧳 Packing'], ['budget','💰 Budget']].map(([key, label]) => (
                             <button key={key} onClick={() => setBuilderTab(key)}
                                 style={{padding:'0.45rem 1.1rem', borderRadius:'999px', border: builderTab===key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: builderTab===key ? 'rgba(14,165,233,0.12)' : 'transparent', color: builderTab===key ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.82rem', cursor:'pointer', transition:'all 0.15s'}}>
                                 {label}
@@ -4937,29 +4971,6 @@ ${buildTripContext(active)}`;
                     {/* ── SCHEDULE TAB ── */}
                     {builderTab === 'schedule' && (
                         <div>
-                            {/* Trip Essentials */}
-                            <div className="category-block" style={{marginBottom:'1rem'}}>
-                                {sectionHeader('Trip Essentials', showEssentials, () => setShowEssentials(v => !v))}
-                                {showEssentials && (
-                                    <div style={{display:'flex', flexDirection:'column', gap:'0.45rem'}}>
-                                        {[
-                                            { label:`Arrival transport`, date: firstDate, cats:['flight','transport'], defCat:'flight', defTitle:`Arrive in ${itinerary.destination||'destination'}` },
-                                            { label:`Departure transport`, date: lastDate, cats:['flight','transport'], defCat:'flight', defTitle:`Depart ${itinerary.destination||'destination'}` },
-                                            ...nightDays.map((d, i) => ({ label:`Night ${i+1} lodging`, date: d.date, cats:['lodging'], defCat:'lodging', defTitle:'Hotel / accommodation' }))
-                                        ].map(row => {
-                                            const done = hasType(row.date, ...row.cats);
-                                            return (
-                                                <div key={row.label} style={{display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 0.6rem', borderRadius:'8px', background: done ? 'rgba(34,197,94,0.06)' : 'var(--surface)', border:'1px solid var(--border)'}}>
-                                                    <span style={{fontSize:'1rem', flexShrink:0}}>{done ? '✅' : '⬜'}</span>
-                                                    <div style={{flex:1, fontSize:'0.85rem', fontWeight:'600', color: done ? 'var(--success)' : 'var(--text)'}}>{row.label}</div>
-                                                    <div style={{fontSize:'0.75rem', color:'var(--text-muted)', flexShrink:0}}>{fmtDate(row.date)}</div>
-                                                    {!done && <button className="btn" style={{fontSize:'0.75rem', padding:'0.25rem 0.65rem', flexShrink:0}} onClick={() => { quickAdd(row.date, row.defCat, row.defTitle); setBuilderTab('schedule'); }}>+ Add</button>}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
 
                             {/* AI Suggestions */}
                             <div className="category-block" style={{marginBottom:'1rem'}}>
@@ -4999,8 +5010,9 @@ ${buildTripContext(active)}`;
                             {/* Day grid cards */}
                             {days.map((day, idx) => {
                                 const color = DAY_COLORS[idx % DAY_COLORS.length];
-                                const timedItems   = day.items.filter(i => i.time).sort((a,b) => a.time.localeCompare(b.time));
-                                const untimedItems = day.items.filter(i => !i.time);
+                                const virtualItems = getVirtualItems(day.date);
+                                const timedItems   = [...day.items.filter(i => i.time), ...virtualItems.filter(i => i.time)].sort((a,b) => a.time.localeCompare(b.time));
+                                const untimedItems = [...day.items.filter(i => !i.time), ...virtualItems.filter(i => !i.time)];
 
                                 // Compute grid hour range from items (default 7–22)
                                 let gStartH = 7, gEndH = 22;
@@ -5058,7 +5070,8 @@ ${buildTripContext(active)}`;
                                                         const h    = Math.max(44, (eMin - sMin) * PX_PER_MIN);
                                                         const dur  = fmtDur(eMin - sMin);
                                                         const ci   = catInfo(item.category);
-                                                        const isEd = editingId === item.id;
+                                                        const isEd = !item._virtual && editingId === item.id;
+                                                        const vColor = item._source === 'lodging' ? '#8B5CF6' : '#0EA5E9';
                                                         return (
                                                             <div key={item.id} style={{position:'absolute', top:`${top}px`, left:'4px', right:'4px', height:`${h}px`, zIndex: isEd ? 20 : 1}}>
                                                                 {isEd ? (
@@ -5084,6 +5097,18 @@ ${buildTripContext(active)}`;
                                                                             <button className="btn btn-primary" onClick={() => saveEdit(day.date)} style={{flex:1, fontSize:'0.78rem'}}>Save</button>
                                                                             <button className="btn" onClick={() => setEditingId(null)} style={{flex:1, fontSize:'0.78rem'}}>Cancel</button>
                                                                         </div>
+                                                                    </div>
+                                                                ) : item._virtual ? (
+                                                                    <div title={`From ${item._source} tab`}
+                                                                        style={{height:'100%', background:`${vColor}12`, border:`1.5px dashed ${vColor}80`, borderLeft:`3px solid ${vColor}`, borderRadius:'6px', padding:'0.3rem 0.5rem', overflow:'hidden', cursor:'default', display:'flex', flexDirection:'column', gap:'0.08rem', boxSizing:'border-box'}}>
+                                                                        <div style={{display:'flex', alignItems:'center', gap:'0.25rem', minWidth:0}}>
+                                                                            <span style={{fontWeight:'700', fontSize:'0.79rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1}}>{item.title}</span>
+                                                                            <button onClick={() => setBuilderTab(item._source)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'0.62rem', color:vColor, padding:'0 0.1rem', flexShrink:0, lineHeight:1}}>edit →</button>
+                                                                        </div>
+                                                                        <div style={{fontSize:'0.67rem', color:vColor, fontWeight:'700', fontVariantNumeric:'tabular-nums', lineHeight:1.2}}>
+                                                                            {item.time}{item.end_time ? `–${item.end_time}` : ''}{dur ? ` (${dur})` : ''}
+                                                                        </div>
+                                                                        {h >= 72 && item.notes && <div style={{fontSize:'0.68rem', color:'var(--text-muted)', overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', marginTop:'0.1rem'}}>{item.notes}</div>}
                                                                     </div>
                                                                 ) : (
                                                                     <div draggable onDragStart={e => handleDragStart(e, day.date, item.id)} onDragEnd={handleDragEnd}
@@ -5148,6 +5173,14 @@ ${buildTripContext(active)}`;
                                                 <div style={{display:'flex', flexDirection:'column', gap:'0.35rem'}}>
                                                     {untimedItems.map(item => {
                                                         const ci = catInfo(item.category);
+                                                        const vColor = item._source === 'lodging' ? '#8B5CF6' : '#0EA5E9';
+                                                        if (item._virtual) return (
+                                                            <div key={item.id} style={{display:'flex', alignItems:'center', gap:'0.5rem', background:`${vColor}0a`, border:`1.5px dashed ${vColor}60`, borderRadius:'8px', padding:'0.45rem 0.7rem', cursor:'default'}}>
+                                                                <span style={{fontWeight:'600', fontSize:'0.85rem', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{item.title}</span>
+                                                                {item.notes && <span style={{fontSize:'0.75rem', color:'var(--text-muted)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'120px'}}>{item.notes}</span>}
+                                                                <button onClick={() => setBuilderTab(item._source)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'0.72rem', color:vColor, padding:'0 0.1rem', flexShrink:0}}>edit →</button>
+                                                            </div>
+                                                        );
                                                         return (
                                                             <div key={item.id} draggable onDragStart={e => handleDragStart(e, day.date, item.id)} onDragEnd={handleDragEnd}
                                                                 style={{display:'flex', alignItems:'center', gap:'0.5rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'8px', padding:'0.45rem 0.7rem', cursor:'grab', opacity: draggingId === item.id ? 0.4 : 1}}>
@@ -5201,6 +5234,185 @@ ${buildTripContext(active)}`;
                                     </div>
                                 );
                             })}
+                        </div>
+                    )}
+
+                    {/* ── TRANSPORT TAB ── */}
+                    {builderTab === 'transport' && (
+                        <div>
+                            <div className="category-block" style={{marginBottom:'1rem'}}>
+                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: addingTransport ? '1rem' : 0}}>
+                                    <div style={{fontWeight:'700', fontSize:'0.95rem'}}>✈️ Transportation</div>
+                                    {!addingTransport && <button className="btn btn-primary" style={{fontSize:'0.8rem'}} onClick={() => { setTransportForm({ type:'flight', date: days[0]?.date||'', from:'', to:'', departure_time:'', arrival_time:'', arrival_date:'', carrier:'', reference:'', notes:'' }); setAddingTransport(true); }}>+ Add</button>}
+                                </div>
+                                {addingTransport && (
+                                    <div style={{display:'grid', gap:'0.6rem'}}>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.5rem'}}>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>Type</label>
+                                                <select className="country-select" value={transportForm.type} onChange={e => setTransportForm({...transportForm, type: e.target.value})}>
+                                                    {[['flight','✈️ Flight'],['train','🚂 Train'],['bus','🚌 Bus'],['car','🚗 Car / Rental'],['ferry','⛴️ Ferry'],['other','🚌 Other']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>Date</label>
+                                                <input type="date" value={transportForm.date} onChange={e => setTransportForm({...transportForm, date: e.target.value})} />
+                                            </div>
+                                        </div>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.5rem'}}>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>From</label>
+                                                <input type="text" placeholder="e.g. Chicago (ORD)" value={transportForm.from} onChange={e => setTransportForm({...transportForm, from: e.target.value})} />
+                                            </div>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>To</label>
+                                                <input type="text" placeholder="e.g. Paris (CDG)" value={transportForm.to} onChange={e => setTransportForm({...transportForm, to: e.target.value})} />
+                                            </div>
+                                        </div>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.5rem'}}>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>Departure time</label>
+                                                <input type="time" value={transportForm.departure_time} onChange={e => setTransportForm({...transportForm, departure_time: e.target.value})} />
+                                            </div>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>Arrival time</label>
+                                                <input type="time" value={transportForm.arrival_time} onChange={e => setTransportForm({...transportForm, arrival_time: e.target.value})} />
+                                            </div>
+                                        </div>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.5rem'}}>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>Carrier / Airline</label>
+                                                <input type="text" placeholder="e.g. United Airlines" value={transportForm.carrier} onChange={e => setTransportForm({...transportForm, carrier: e.target.value})} />
+                                            </div>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>Booking reference</label>
+                                                <input type="text" placeholder="e.g. UA206 / ABC123" value={transportForm.reference} onChange={e => setTransportForm({...transportForm, reference: e.target.value})} />
+                                            </div>
+                                        </div>
+                                        <div className="form-group" style={{margin:0}}>
+                                            <label style={{fontSize:'0.75rem'}}>Notes</label>
+                                            <input type="text" placeholder="Terminal, seat, baggage info…" value={transportForm.notes} onChange={e => setTransportForm({...transportForm, notes: e.target.value})} />
+                                        </div>
+                                        <div style={{display:'flex', gap:'0.5rem'}}>
+                                            <button className="btn btn-primary" style={{flex:1}} onClick={() => {
+                                                if (!transportForm.from || !transportForm.to || !transportForm.date) { alert('Please fill in From, To, and Date.'); return; }
+                                                const entry = { ...transportForm, id: Date.now().toString(36)+Math.random().toString(36).slice(2) };
+                                                persistTransport([...transport, entry]);
+                                                setAddingTransport(false);
+                                            }}>Save</button>
+                                            <button className="btn" style={{flex:1}} onClick={() => setAddingTransport(false)}>Cancel</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            {transport.length === 0 && !addingTransport && (
+                                <p style={{color:'var(--text-muted)', fontSize:'0.85rem', fontStyle:'italic'}}>No transport entries yet. Add flights, trains, or car rentals and they'll appear in your schedule automatically.</p>
+                            )}
+                            <div style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+                                {transport.map(t => {
+                                    const emoji = TRANSPORT_EMOJI[t.type] || '🚌';
+                                    return (
+                                        <div key={t.id} className="category-block" style={{padding:'0.85rem 1rem'}}>
+                                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'0.5rem'}}>
+                                                <div style={{flex:1}}>
+                                                    <div style={{fontWeight:'700', fontSize:'0.9rem', marginBottom:'0.25rem'}}>{emoji} {t.from} → {t.to}</div>
+                                                    <div style={{fontSize:'0.8rem', color:'var(--text-muted)', display:'flex', gap:'0.75rem', flexWrap:'wrap'}}>
+                                                        {t.carrier && <span>{t.carrier}</span>}
+                                                        {t.reference && <span>Ref: {t.reference}</span>}
+                                                        {t.date && <span>{fmtDate(t.date)}</span>}
+                                                        {t.departure_time && <span>{t.departure_time}{t.arrival_time ? ` → ${t.arrival_time}` : ''}</span>}
+                                                    </div>
+                                                    {t.notes && <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.2rem'}}>{t.notes}</div>}
+                                                </div>
+                                                <button onClick={() => persistTransport(transport.filter(x => x.id !== t.id))} style={{background:'none', border:'none', cursor:'pointer', fontSize:'1.1rem', color:'var(--text-muted)', flexShrink:0}}>×</button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── LODGING TAB ── */}
+                    {builderTab === 'lodging' && (
+                        <div>
+                            <div className="category-block" style={{marginBottom:'1rem'}}>
+                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: addingLodging ? '1rem' : 0}}>
+                                    <div style={{fontWeight:'700', fontSize:'0.95rem'}}>🏨 Lodging</div>
+                                    {!addingLodging && <button className="btn btn-primary" style={{fontSize:'0.8rem'}} onClick={() => { setLodgingForm({ name:'', address:'', check_in_date: days[0]?.date||'', check_in_time:'15:00', check_out_date: days[days.length-1]?.date||'', check_out_time:'11:00', confirmation:'', notes:'' }); setAddingLodging(true); }}>+ Add</button>}
+                                </div>
+                                {addingLodging && (
+                                    <div style={{display:'grid', gap:'0.6rem'}}>
+                                        <div className="form-group" style={{margin:0}}>
+                                            <label style={{fontSize:'0.75rem'}}>Property name</label>
+                                            <input type="text" placeholder="e.g. The Grand Hotel" value={lodgingForm.name} onChange={e => setLodgingForm({...lodgingForm, name: e.target.value})} />
+                                        </div>
+                                        <div className="form-group" style={{margin:0}}>
+                                            <label style={{fontSize:'0.75rem'}}>Address</label>
+                                            <input type="text" placeholder="Street address, city" value={lodgingForm.address} onChange={e => setLodgingForm({...lodgingForm, address: e.target.value})} />
+                                        </div>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.5rem'}}>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>Check-in date</label>
+                                                <input type="date" value={lodgingForm.check_in_date} onChange={e => setLodgingForm({...lodgingForm, check_in_date: e.target.value})} />
+                                            </div>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>Check-in time</label>
+                                                <input type="time" value={lodgingForm.check_in_time} onChange={e => setLodgingForm({...lodgingForm, check_in_time: e.target.value})} />
+                                            </div>
+                                        </div>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.5rem'}}>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>Check-out date</label>
+                                                <input type="date" value={lodgingForm.check_out_date} onChange={e => setLodgingForm({...lodgingForm, check_out_date: e.target.value})} />
+                                            </div>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label style={{fontSize:'0.75rem'}}>Check-out time</label>
+                                                <input type="time" value={lodgingForm.check_out_time} onChange={e => setLodgingForm({...lodgingForm, check_out_time: e.target.value})} />
+                                            </div>
+                                        </div>
+                                        <div className="form-group" style={{margin:0}}>
+                                            <label style={{fontSize:'0.75rem'}}>Confirmation number</label>
+                                            <input type="text" placeholder="Booking reference" value={lodgingForm.confirmation} onChange={e => setLodgingForm({...lodgingForm, confirmation: e.target.value})} />
+                                        </div>
+                                        <div className="form-group" style={{margin:0}}>
+                                            <label style={{fontSize:'0.75rem'}}>Notes</label>
+                                            <input type="text" placeholder="Parking, breakfast, amenities…" value={lodgingForm.notes} onChange={e => setLodgingForm({...lodgingForm, notes: e.target.value})} />
+                                        </div>
+                                        <div style={{display:'flex', gap:'0.5rem'}}>
+                                            <button className="btn btn-primary" style={{flex:1}} onClick={() => {
+                                                if (!lodgingForm.name || !lodgingForm.check_in_date || !lodgingForm.check_out_date) { alert('Please fill in property name, check-in, and check-out dates.'); return; }
+                                                const entry = { ...lodgingForm, id: Date.now().toString(36)+Math.random().toString(36).slice(2) };
+                                                persistLodging([...lodging, entry]);
+                                                setAddingLodging(false);
+                                            }}>Save</button>
+                                            <button className="btn" style={{flex:1}} onClick={() => setAddingLodging(false)}>Cancel</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            {lodging.length === 0 && !addingLodging && (
+                                <p style={{color:'var(--text-muted)', fontSize:'0.85rem', fontStyle:'italic'}}>No lodging entries yet. Add hotels or accommodation and check-in/out will appear in your schedule automatically.</p>
+                            )}
+                            <div style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+                                {lodging.map(l => (
+                                    <div key={l.id} className="category-block" style={{padding:'0.85rem 1rem'}}>
+                                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'0.5rem'}}>
+                                            <div style={{flex:1}}>
+                                                <div style={{fontWeight:'700', fontSize:'0.9rem', marginBottom:'0.25rem'}}>🏨 {l.name}</div>
+                                                {l.address && <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginBottom:'0.2rem'}}>{l.address}</div>}
+                                                <div style={{fontSize:'0.8rem', color:'var(--text-muted)', display:'flex', gap:'0.75rem', flexWrap:'wrap'}}>
+                                                    <span>Check-in: {fmtDate(l.check_in_date)}{l.check_in_time ? ` at ${l.check_in_time}` : ''}</span>
+                                                    <span>Check-out: {fmtDate(l.check_out_date)}{l.check_out_time ? ` at ${l.check_out_time}` : ''}</span>
+                                                    {l.confirmation && <span>Conf: {l.confirmation}</span>}
+                                                </div>
+                                                {l.notes && <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.2rem'}}>{l.notes}</div>}
+                                            </div>
+                                            <button onClick={() => persistLodging(lodging.filter(x => x.id !== l.id))} style={{background:'none', border:'none', cursor:'pointer', fontSize:'1.1rem', color:'var(--text-muted)', flexShrink:0}}>×</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 
