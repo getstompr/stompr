@@ -4469,9 +4469,9 @@ ${buildTripContext(active)}`;
             const [expenses,     setExpenses]     = useState(itinerary.expenses || []);
             const [builderTab,   setBuilderTab]   = useState('schedule');
             const [addingFor,    setAddingFor]    = useState(null);
-            const [form,         setForm]         = useState({ time:'', end_time:'', title:'', category:'activity', notes:'' });
+            const [form,         setForm]         = useState({ time:'', end_time:'', title:'', category:'activity', notes:'', booking_status:'none' });
             const [editingId,    setEditingId]    = useState(null);
-            const [editForm,     setEditForm]     = useState({ time:'', end_time:'', title:'', category:'activity', notes:'' });
+            const [editForm,     setEditForm]     = useState({ time:'', end_time:'', title:'', category:'activity', notes:'', booking_status:'none' });
             const [draggingId,   setDraggingId]   = useState(null);
             const [dragOverDate, setDragOverDate] = useState(null);
             const [suggestions,  setSuggestions]  = useState([]);
@@ -4625,10 +4625,11 @@ ${buildTripContext(active)}`;
                 }
             };
 
+            const BOOKING_NEEDED_CATS = new Set(['flight','lodging','activity']);
             const addItem = (date) => {
                 if (!form.title.trim()) return;
                 addItemDirect(date, { ...form, title: form.title.trim() });
-                setForm({ time:'', end_time:'', title:'', category:'activity', notes:'' });
+                setForm({ time:'', end_time:'', title:'', category:'activity', notes:'', booking_status:'none' });
                 setAddingFor(null);
             };
 
@@ -4638,8 +4639,16 @@ ${buildTripContext(active)}`;
 
             const startEdit = (item) => {
                 setEditingId(item.id);
-                setEditForm({ time: item.time||'', end_time: item.end_time||'', title: item.title, category: item.category, notes: item.notes||'' });
+                setEditForm({ time: item.time||'', end_time: item.end_time||'', title: item.title, category: item.category, notes: item.notes||'', booking_status: item.booking_status||'none' });
                 setAddingFor(null);
+            };
+
+            const toggleBookingStatus = (date, itemId) => {
+                const nd = days.map(d => d.date !== date ? d : {
+                    ...d, items: d.items.map(i => i.id !== itemId ? i :
+                        { ...i, booking_status: i.booking_status === 'done' ? 'needed' : 'done' })
+                });
+                persist(nd);
             };
 
             const saveEdit = (date) => {
@@ -5009,7 +5018,7 @@ ${buildTripContext(active)}`;
 
                     {/* Sub-tabs */}
                     <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.25rem', flexWrap:'wrap'}}>
-                        {[['schedule','🗓️ Schedule'], ['transport','✈️ Transport'], ['lodging','🏨 Lodging'], ['packing','🧳 Packing'], ['budget','💰 Budget']].map(([key, label]) => (
+                        {[['schedule','🗓️ Schedule'], ['todo','✅ To-Do'], ['transport','✈️ Transport'], ['lodging','🏨 Lodging'], ['packing','🧳 Packing'], ['budget','💰 Budget']].map(([key, label]) => (
                             <button key={key} onClick={() => setBuilderTab(key)}
                                 style={{padding:'0.45rem 1.1rem', borderRadius:'999px', border: builderTab===key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: builderTab===key ? 'rgba(14,165,233,0.12)' : 'transparent', color: builderTab===key ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.82rem', cursor:'pointer', transition:'all 0.15s'}}>
                                 {label}
@@ -5121,6 +5130,8 @@ ${buildTripContext(active)}`;
                                                         const ci   = catInfo(item.category);
                                                         const isEd = !item._virtual && editingId === item.id;
                                                         const vColor = item._source === 'lodging' ? '#8B5CF6' : '#0EA5E9';
+                                                        const bkColor = item.booking_status === 'done' ? '#16a34a' : item.booking_status === 'needed' ? '#d97706' : null;
+                                                        const itemColor = item._virtual ? vColor : (bkColor || color);
                                                         return (
                                                             <div key={item.id} style={{position:'absolute', top:`${top}px`, left:'4px', right:'4px', height:`${h}px`, zIndex: isEd ? 20 : 1}}>
                                                                 {isEd ? (
@@ -5141,6 +5152,15 @@ ${buildTripContext(active)}`;
                                                                                 {categories.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
                                                                             </select>
                                                                             <input type="text" value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} placeholder="Notes" />
+                                                                        </div>
+                                                                        <div style={{display:'flex', gap:'0.3rem', alignItems:'center'}}>
+                                                                            <span style={{fontSize:'0.65rem', color:'var(--text-muted)', whiteSpace:'nowrap'}}>Booking:</span>
+                                                                            {[['none','None'],['needed','⚠ Needed'],['done','✓ Booked']].map(([v,l]) => (
+                                                                                <button type="button" key={v} onClick={() => setEditForm({...editForm, booking_status: v})}
+                                                                                    style={{flex:1, padding:'0.25rem 0.2rem', fontSize:'0.62rem', fontWeight:'700', borderRadius:'5px', border:`1.5px solid ${editForm.booking_status===v?(v==='done'?'#16a34a':v==='needed'?'#d97706':'var(--border)'):'var(--border)'}`, background: editForm.booking_status===v?(v==='done'?'rgba(34,197,94,0.12)':v==='needed'?'rgba(245,158,11,0.12)':'var(--surface)'):'transparent', color: editForm.booking_status===v?(v==='done'?'#16a34a':v==='needed'?'#d97706':'var(--text)'):'var(--text-muted)', cursor:'pointer'}}>
+                                                                                    {l}
+                                                                                </button>
+                                                                            ))}
                                                                         </div>
                                                                         <div style={{display:'flex', gap:'0.4rem'}}>
                                                                             <button className="btn btn-primary" onClick={() => saveEdit(day.date)} style={{flex:1, fontSize:'0.78rem'}}>Save</button>
@@ -5163,19 +5183,20 @@ ${buildTripContext(active)}`;
                                                                     <div draggable onDragStart={e => handleDragStart(e, day.date, item.id)} onDragEnd={handleDragEnd}
                                                                         onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverDate(day.date); }}
                                                                         onDrop={e => { e.stopPropagation(); handleDrop(e, day.date, item.id); }}
-                                                                        style={{height:'100%', background:`${color}18`, border:`1.5px solid ${color}55`, borderLeft:`3px solid ${color}`, borderRadius:'6px', padding:'0.3rem 0.5rem', overflow:'hidden', cursor:'grab', opacity: draggingId === item.id ? 0.4 : 1, transition:'opacity 0.15s', display:'flex', flexDirection:'column', gap:'0.08rem', boxSizing:'border-box'}}>
+                                                                        style={{height:'100%', background:`${itemColor}18`, border:`1.5px solid ${itemColor}55`, borderLeft:`3px solid ${itemColor}`, borderRadius:'6px', padding:'0.3rem 0.5rem', overflow:'hidden', cursor:'grab', opacity: draggingId === item.id ? 0.4 : 1, transition:'opacity 0.15s', display:'flex', flexDirection:'column', gap:'0.08rem', boxSizing:'border-box'}}>
                                                                         <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'0.2rem'}}>
                                                                             <div style={{display:'flex', alignItems:'center', gap:'0.25rem', minWidth:0, flex:1}}>
                                                                                 <span style={{fontSize:'0.82rem', flexShrink:0}}>{ci.icon}</span>
                                                                                 <span style={{fontWeight:'700', fontSize:'0.79rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{item.title}</span>
-                                                                                {item.lat && <span style={{fontSize:'0.55rem', color:color, flexShrink:0}}>📍</span>}
+                                                                                {item.booking_status === 'done' && <span style={{fontSize:'0.6rem', color:'#16a34a', flexShrink:0}}>✓</span>}
+                                                                                {item.booking_status === 'needed' && <span style={{fontSize:'0.6rem', color:'#d97706', flexShrink:0}}>⚠</span>}
                                                                             </div>
                                                                             <div style={{display:'flex', gap:0, flexShrink:0}}>
-                                                                                <button onClick={() => startEdit(item)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'0.7rem', padding:'0 0.15rem', lineHeight:1, color:color}}>✏️</button>
+                                                                                <button onClick={() => startEdit(item)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'0.7rem', padding:'0 0.15rem', lineHeight:1, color:itemColor}}>✏️</button>
                                                                                 <button onClick={() => removeItem(day.date, item.id)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'0.9rem', lineHeight:1, padding:'0 0.1rem', color:'var(--text-muted)'}}>×</button>
                                                                             </div>
                                                                         </div>
-                                                                        <div style={{fontSize:'0.67rem', color:color, fontWeight:'700', fontVariantNumeric:'tabular-nums', lineHeight:1.2}}>
+                                                                        <div style={{fontSize:'0.67rem', color:itemColor, fontWeight:'700', fontVariantNumeric:'tabular-nums', lineHeight:1.2}}>
                                                                             {item.time}{item.end_time ? `–${item.end_time}` : ''}{dur ? ` (${dur})` : ''}
                                                                         </div>
                                                                         {h >= 72 && item.notes && <div style={{fontSize:'0.68rem', color:'var(--text-muted)', overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', marginTop:'0.1rem'}}>{item.notes}</div>}
@@ -5200,14 +5221,23 @@ ${buildTripContext(active)}`;
                                                             </div>
                                                             <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="e.g. Colosseum tour" />
                                                             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.4rem'}}>
-                                                                <select className="country-select" value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
+                                                                <select className="country-select" value={form.category} onChange={e => { const auto = BOOKING_NEEDED_CATS.has(e.target.value) && form.booking_status==='none' ? 'needed' : form.booking_status; setForm({...form, category: e.target.value, booking_status: auto}); }}>
                                                                     {categories.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
                                                                 </select>
                                                                 <input type="text" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} placeholder="Notes" />
                                                             </div>
+                                                            <div style={{display:'flex', gap:'0.3rem', alignItems:'center'}}>
+                                                                <span style={{fontSize:'0.65rem', color:'var(--text-muted)', whiteSpace:'nowrap'}}>Booking:</span>
+                                                                {[['none','None'],['needed','⚠ Needed'],['done','✓ Booked']].map(([v,l]) => (
+                                                                    <button type="button" key={v} onClick={() => setForm({...form, booking_status: v})}
+                                                                        style={{flex:1, padding:'0.25rem 0.2rem', fontSize:'0.62rem', fontWeight:'700', borderRadius:'5px', border:`1.5px solid ${form.booking_status===v?(v==='done'?'#16a34a':v==='needed'?'#d97706':'var(--border)'):'var(--border)'}`, background: form.booking_status===v?(v==='done'?'rgba(34,197,94,0.12)':v==='needed'?'rgba(245,158,11,0.12)':'var(--surface)'):'transparent', color: form.booking_status===v?(v==='done'?'#16a34a':v==='needed'?'#d97706':'var(--text)'):'var(--text-muted)', cursor:'pointer'}}>
+                                                                        {l}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
                                                             <div style={{display:'flex', gap:'0.4rem'}}>
                                                                 <button type="button" className="btn btn-primary" onClick={() => addItem(day.date)} style={{flex:1, fontSize:'0.8rem'}}>Add</button>
-                                                                <button type="button" className="btn" onClick={() => { setAddingFor(null); setForm({time:'',end_time:'',title:'',category:'activity',notes:''}); }} style={{flex:1, fontSize:'0.8rem'}}>Cancel</button>
+                                                                <button type="button" className="btn" onClick={() => { setAddingFor(null); setForm({time:'',end_time:'',title:'',category:'activity',notes:'',booking_status:'none'}); }} style={{flex:1, fontSize:'0.8rem'}}>Cancel</button>
                                                             </div>
                                                         </div>
                                                     )}
@@ -5269,14 +5299,23 @@ ${buildTripContext(active)}`;
                                                 </div>
                                                 <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="e.g. Colosseum tour" />
                                                 <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.4rem'}}>
-                                                    <select className="country-select" value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
+                                                    <select className="country-select" value={form.category} onChange={e => { const auto = BOOKING_NEEDED_CATS.has(e.target.value) && form.booking_status==='none' ? 'needed' : form.booking_status; setForm({...form, category: e.target.value, booking_status: auto}); }}>
                                                         {categories.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
                                                     </select>
                                                     <input type="text" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} placeholder="Notes" />
                                                 </div>
+                                                <div style={{display:'flex', gap:'0.3rem', alignItems:'center'}}>
+                                                    <span style={{fontSize:'0.65rem', color:'var(--text-muted)', whiteSpace:'nowrap'}}>Booking:</span>
+                                                    {[['none','None'],['needed','⚠ Needed'],['done','✓ Booked']].map(([v,l]) => (
+                                                        <button type="button" key={v} onClick={() => setForm({...form, booking_status: v})}
+                                                            style={{flex:1, padding:'0.25rem 0.2rem', fontSize:'0.62rem', fontWeight:'700', borderRadius:'5px', border:`1.5px solid ${form.booking_status===v?(v==='done'?'#16a34a':v==='needed'?'#d97706':'var(--border)'):'var(--border)'}`, background: form.booking_status===v?(v==='done'?'rgba(34,197,94,0.12)':v==='needed'?'rgba(245,158,11,0.12)':'var(--surface)'):'transparent', color: form.booking_status===v?(v==='done'?'#16a34a':v==='needed'?'#d97706':'var(--text)'):'var(--text-muted)', cursor:'pointer'}}>
+                                                            {l}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                                 <div style={{display:'flex', gap:'0.4rem'}}>
                                                     <button type="button" className="btn btn-primary" onClick={() => addItem(day.date)} style={{flex:1, fontSize:'0.8rem'}}>Add</button>
-                                                    <button type="button" className="btn" onClick={() => { setAddingFor(null); setForm({time:'',end_time:'',title:'',category:'activity',notes:''}); }} style={{flex:1, fontSize:'0.8rem'}}>Cancel</button>
+                                                    <button type="button" className="btn" onClick={() => { setAddingFor(null); setForm({time:'',end_time:'',title:'',category:'activity',notes:'',booking_status:'none'}); }} style={{flex:1, fontSize:'0.8rem'}}>Cancel</button>
                                                 </div>
                                             </div>
                                         )}
@@ -5285,6 +5324,61 @@ ${buildTripContext(active)}`;
                             })}
                         </div>
                     )}
+
+                    {/* ── TO-DO TAB ── */}
+                    {builderTab === 'todo' && (() => {
+                        const allTodo = days.flatMap((d, idx) =>
+                            d.items.filter(i => i.booking_status && i.booking_status !== 'none').map(i => ({ ...i, _date: d.date, _dayIdx: idx }))
+                        );
+                        const needed = allTodo.filter(i => i.booking_status === 'needed');
+                        const booked = allTodo.filter(i => i.booking_status === 'done');
+                        const renderItem = (item) => {
+                            const ci = catInfo(item.category);
+                            const done = item.booking_status === 'done';
+                            const dc = DAY_COLORS[item._dayIdx % DAY_COLORS.length];
+                            return (
+                                <div key={item.id} style={{display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.65rem 0.85rem', borderRadius:'10px', border:`1.5px solid ${done?'#22C55E40':'#F59E0B40'}`, background: done?'rgba(34,197,94,0.04)':'rgba(245,158,11,0.04)', marginBottom:'0.5rem'}}>
+                                    <button onClick={() => toggleBookingStatus(item._date, item.id)}
+                                        style={{width:'22px', height:'22px', borderRadius:'50%', border:`2px solid ${done?'#22C55E':'#F59E0B'}`, background: done?'#22C55E':'transparent', color:'#fff', cursor:'pointer', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.8rem', fontWeight:'700', padding:0}}>
+                                        {done?'✓':''}
+                                    </button>
+                                    <span style={{fontSize:'0.95rem', flexShrink:0}}>{ci.icon}</span>
+                                    <div style={{flex:1, minWidth:0}}>
+                                        <div style={{fontWeight:'600', fontSize:'0.88rem', color: done?'var(--text-muted)':'var(--text)', textDecoration: done?'line-through':'none'}}>{item.title}</div>
+                                        <div style={{fontSize:'0.75rem', color:'var(--text-muted)', display:'flex', gap:'0.5rem', marginTop:'0.1rem'}}>
+                                            <span style={{display:'inline-flex', alignItems:'center', gap:'3px'}}><span style={{width:6, height:6, borderRadius:'50%', background:dc, display:'inline-block'}} />Day {item._dayIdx+1} · {fmtDate(item._date)}</span>
+                                            {item.time && <span>{item.time}{item.end_time?`–${item.end_time}`:''}</span>}
+                                        </div>
+                                    </div>
+                                    <span style={{fontSize:'0.72rem', fontWeight:'700', color: done?'#16a34a':'#d97706', flexShrink:0}}>{done?'✓ Booked':'Book this'}</span>
+                                </div>
+                            );
+                        };
+                        return (
+                            <div>
+                                <div style={{display:'flex', gap:'1rem', marginBottom:'1.25rem', flexWrap:'wrap'}}>
+                                    <div style={{display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.8rem', color:'var(--text-muted)'}}><span style={{width:10,height:10,borderRadius:'50%',background:'#F59E0B',display:'inline-block'}} />Needs booking</div>
+                                    <div style={{display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.8rem', color:'var(--text-muted)'}}><span style={{width:10,height:10,borderRadius:'50%',background:'#22C55E',display:'inline-block'}} />Booked</div>
+                                    <div style={{fontSize:'0.78rem', color:'var(--text-muted)', fontStyle:'italic'}}>Tap the circle to toggle status</div>
+                                </div>
+                                {allTodo.length === 0 && (
+                                    <p style={{color:'var(--text-muted)', fontSize:'0.85rem', fontStyle:'italic'}}>No items yet. When adding activities in the Schedule tab, set "⚠ Needed" or "✓ Booked" to track them here.</p>
+                                )}
+                                {needed.length > 0 && (
+                                    <div style={{marginBottom:'1.25rem'}}>
+                                        <div style={{fontWeight:'700', fontSize:'0.78rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'#d97706', marginBottom:'0.6rem'}}>⚠ Still need to book ({needed.length})</div>
+                                        {needed.map(renderItem)}
+                                    </div>
+                                )}
+                                {booked.length > 0 && (
+                                    <div>
+                                        <div style={{fontWeight:'700', fontSize:'0.78rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'#16a34a', marginBottom:'0.6rem'}}>✓ Booked ({booked.length})</div>
+                                        {booked.map(renderItem)}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     {/* ── TRANSPORT TAB ── */}
                     {builderTab === 'transport' && (
