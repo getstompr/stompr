@@ -2138,7 +2138,7 @@
                             )}
 
                             {activeTab === 'itinerary' && (
-                                <ItineraryView session={session} />
+                                <ItineraryView session={session} profile={profile} />
                             )}
 
                             {activeTab === 'expenses' && (
@@ -4212,9 +4212,10 @@
             );
         }
 
-        function ItineraryView({ session }) {
+        function ItineraryView({ session, profile }) {
             const { useState, useEffect } = React;
             const [itineraries, setItineraries] = useState([]);
+            const [sharedItineraries, setSharedItineraries] = useState([]);
             const [loading, setLoading] = useState(true);
             const [view, setView] = useState('list'); // 'list' | 'wizard' | 'builder'
             const [activeId, setActiveId] = useState(null);
@@ -4231,7 +4232,7 @@
                 { value:'other', label:'Other', icon:'📌' },
             ];
 
-            useEffect(() => { loadItineraries(); }, []);
+            useEffect(() => { loadItineraries(); loadSharedItineraries(); }, []);
 
             const loadItineraries = async () => {
                 setLoading(true);
@@ -4242,6 +4243,16 @@
                     .order('start_date', { ascending: true });
                 if (data) setItineraries(data);
                 setLoading(false);
+            };
+
+            const loadSharedItineraries = async () => {
+                const { data } = await supabaseClient
+                    .from('itinerary_shares')
+                    .select('*, itinerary:itinerary_id(*)')
+                    .eq('shared_with_email', session.user.email);
+                if (data) {
+                    setSharedItineraries(data.map(s => ({ ...s.itinerary, _sharedBy: s.shared_by_user_id, _permission: s.permission, _shareId: s.id })).filter(Boolean));
+                }
             };
 
             const toggleTripType = (t) => {
@@ -4264,6 +4275,12 @@
                 if (!wizard.name.trim() || !wizard.start_date) return;
                 setSaving(true);
                 const days = buildDays(wizard.start_date, wizard.end_date || wizard.start_date);
+                const baseline = profile?.baseline_packing_list || [];
+                const packing_list = baseline.map(b => ({
+                    ...b,
+                    id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+                    checked: false,
+                }));
                 const { data, error } = await supabaseClient
                     .from('itineraries')
                     .insert({
@@ -4275,6 +4292,7 @@
                         travelers: parseInt(wizard.travelers) || 1,
                         trip_types: wizard.trip_types,
                         days,
+                        packing_list,
                     })
                     .select()
                     .single();
@@ -4345,6 +4363,29 @@
                                 </div>
                             ))}
                         </div>
+
+                        {sharedItineraries.length > 0 && (
+                            <div style={{marginTop:'1.75rem'}}>
+                                <h3 style={{fontSize:'1rem', fontWeight:'700', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.85rem'}}>Shared with me</h3>
+                                <div className="places-grid">
+                                    {sharedItineraries.map(it => (
+                                        <div key={it.id} className="category-block" style={{cursor:'pointer', borderColor:'rgba(139,92,246,0.35)'}} onClick={() => { setActiveId(it.id); setView('builder'); }}>
+                                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'start'}}>
+                                                <div>
+                                                    <h3 style={{fontSize:'1.05rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.25rem'}}>{it.name}</h3>
+                                                    {it.destination && <div style={{fontSize:'0.85rem', color:'var(--text-muted)'}}>📍 {it.destination}</div>}
+                                                </div>
+                                                <span style={{fontSize:'0.7rem', fontWeight:'700', color:'#8B5CF6', background:'rgba(139,92,246,0.1)', padding:'3px 8px', borderRadius:'999px', flexShrink:0}}>Shared</span>
+                                            </div>
+                                            <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'0.6rem'}}>
+                                                {it.start_date && fmtDate(it.start_date)}{it.end_date && it.end_date !== it.start_date ? ` – ${fmtDate(it.end_date)}` : ''}
+                                                {' · '}{(it.days || []).length} day{(it.days || []).length === 1 ? '' : 's'}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             }
@@ -4406,6 +4447,8 @@
                     <ItineraryBuilder
                         itinerary={active}
                         categories={CATEGORIES}
+                        session={session}
+                        profile={profile}
                         onBack={() => { setActiveId(null); setView('list'); }}
                         onUpdateItinerary={(fields) => updateItinerary(active.id, fields)}
                         onDelete={() => deleteItinerary(active.id)}
@@ -4418,7 +4461,7 @@
             return null;
         }
 
-        function ItineraryBuilder({ itinerary, categories, onBack, onUpdateItinerary, onDelete, fmtDate, backBtnStyle }) {
+        function ItineraryBuilder({ itinerary, categories, session, profile, onBack, onUpdateItinerary, onDelete, fmtDate, backBtnStyle }) {
             const { useState, useEffect, useRef } = React;
             const [days,         setDays]         = useState(itinerary.days || []);
             const [packingItems, setPackingItems] = useState(itinerary.packing_list || []);
@@ -4441,6 +4484,14 @@
             const [expForm,        setExpForm]        = useState({ description:'', amount:'', category:'Food', date: new Date().toISOString().split('T')[0] });
             const [packInput,      setPackInput]      = useState({ text:'', category:'Clothing' });
             const [packGenLoad,    setPackGenLoad]    = useState(false);
+            const [baselineSaving, setBaselineSaving] = useState(false);
+            const [budgetSuggestLoad, setBudgetSuggestLoad] = useState(false);
+            const [budgetSuggestion,  setBudgetSuggestion]  = useState(null);
+            const [shareOpen,      setShareOpen]      = useState(false);
+            const [shareEmail,     setShareEmail]     = useState('');
+            const [sharePermission,setSharePermission]= useState('view');
+            const [sharing,        setSharing]        = useState(false);
+            const [shares,         setShares]         = useState([]);
             const dragRef    = useRef(null);
             const mapRef     = useRef(null);
             const mapObj     = useRef(null);
@@ -4748,8 +4799,121 @@
             const fmtDur = (min) => min > 0 ? (min >= 60 ? `${Math.floor(min/60)}h${min%60 > 0 ? `${min%60}m` : ''}` : `${min}m`) : '';
             const PX_PER_MIN = 0.85;
 
+            // ── Baseline packing helpers ──
+            const saveBaseline = async () => {
+                setBaselineSaving(true);
+                const items = packingItems.map(({ id, text, category }) => ({ id, text, category }));
+                await supabaseClient.from('profiles').update({ baseline_packing_list: items }).eq('id', session.user.id);
+                setBaselineSaving(false);
+                alert(`Baseline saved (${items.length} item${items.length === 1 ? '' : 's'}). New trips will start with these items.`);
+            };
+
+            const loadBaseline = async () => {
+                setBaselineSaving(true);
+                const { data } = await supabaseClient.from('profiles').select('baseline_packing_list').eq('id', session.user.id).single();
+                setBaselineSaving(false);
+                const bl = data?.baseline_packing_list || [];
+                if (!bl.length) { alert('No baseline saved yet. Add items and click "Save as baseline" first.'); return; }
+                const existingTexts = new Set(packingItems.map(p => p.text.toLowerCase()));
+                const toAdd = bl.filter(b => !existingTexts.has(b.text.toLowerCase()))
+                    .map(b => ({ ...b, id: Date.now().toString(36) + Math.random().toString(36).slice(2), checked: false }));
+                if (!toAdd.length) { alert('All baseline items are already in your list.'); return; }
+                persistPack([...packingItems, ...toAdd]);
+            };
+
+            // ── AI budget suggestion ──
+            const suggestBudget = async () => {
+                if (!budget.total) { alert('Enter your total budget amount first.'); return; }
+                setBudgetSuggestLoad(true);
+                setBudgetSuggestion(null);
+                const currency = budget.currency || 'USD';
+                const total = parseFloat(budget.total) || 0;
+                const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
+                    body: {
+                        systemPrompt: `You are a travel budget expert. Respond ONLY with valid JSON — a raw object, no markdown, no code fences, no explanation. Keys must be exactly: "Food", "Transport", "Accommodation", "Activities", "Shopping", "Health", "Other". Values are numbers. They must sum to exactly ${total}.`,
+                        message: `Suggest a realistic budget breakdown for a trip to ${itinerary.destination || 'an international destination'} for ${itinerary.travelers || 1} traveler${itinerary.travelers === 1 ? '' : 's'} over ${days.length} day${days.length === 1 ? '' : 's'}. Total available: ${currency} ${total}. Trip style: ${(itinerary.trip_types || []).join(', ') || 'general leisure'}. Return a JSON object with exactly these keys: Food, Transport, Accommodation, Activities, Shopping, Health, Other. Values must be numbers summing to ${total}.`,
+                        history: []
+                    }
+                });
+                setBudgetSuggestLoad(false);
+                if (fnErr || data?.error) { alert('Could not generate suggestion. Try again.'); return; }
+                try {
+                    let raw = (data.message || '').trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+                    setBudgetSuggestion(JSON.parse(raw));
+                } catch { alert('Could not parse suggestion. Try again.'); }
+            };
+
+            // ── Sharing helpers ──
+            useEffect(() => { loadShares(); }, [itinerary.id]);
+
+            const loadShares = async () => {
+                const { data } = await supabaseClient.from('itinerary_shares')
+                    .select('*').eq('itinerary_id', itinerary.id).eq('shared_by_user_id', session.user.id);
+                if (data) setShares(data);
+            };
+
+            const shareItinerary = async (e) => {
+                e.preventDefault();
+                if (!shareEmail.trim()) return;
+                setSharing(true);
+                const { error } = await supabaseClient.from('itinerary_shares').insert({
+                    itinerary_id: itinerary.id,
+                    shared_by_user_id: session.user.id,
+                    shared_with_email: shareEmail.trim().toLowerCase(),
+                    permission: sharePermission,
+                });
+                setSharing(false);
+                if (error) { alert(error.message); return; }
+                setShareEmail('');
+                loadShares();
+            };
+
+            const removeShare = async (id) => {
+                await supabaseClient.from('itinerary_shares').delete().eq('id', id);
+                setShares(prev => prev.filter(s => s.id !== id));
+            };
+
             return (
                 <div>
+                    {/* Share modal */}
+                    {shareOpen && (
+                        <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem'}} onClick={e => { if (e.target === e.currentTarget) setShareOpen(false); }}>
+                            <div style={{background:'var(--card-bg)', borderRadius:'16px', padding:'1.5rem', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.25rem'}}>
+                                    <h3 style={{fontSize:'1.1rem', fontWeight:'700', margin:0}}>👥 Share "{itinerary.name}"</h3>
+                                    <button onClick={() => setShareOpen(false)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'1.4rem', color:'var(--text-muted)', lineHeight:1}}>×</button>
+                                </div>
+                                <form onSubmit={shareItinerary} style={{display:'grid', gap:'0.65rem', marginBottom:'1.25rem'}}>
+                                    <input type="email" value={shareEmail} onChange={e => setShareEmail(e.target.value)}
+                                        placeholder="Friend's email address" required style={{fontSize:'0.9rem'}} />
+                                    <div style={{display:'flex', gap:'0.5rem'}}>
+                                        {['view','edit'].map(p => (
+                                            <button type="button" key={p} onClick={() => setSharePermission(p)}
+                                                style={{flex:1, padding:'0.45rem', borderRadius:'8px', border: sharePermission===p ? '2px solid var(--primary)' : '1.5px solid var(--border)', background: sharePermission===p ? 'rgba(14,165,233,0.1)' : 'transparent', color: sharePermission===p ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.82rem', cursor:'pointer'}}>
+                                                {p === 'view' ? '👁️ View only' : '✏️ Can edit'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button type="submit" className="btn btn-primary" disabled={sharing}>{sharing ? 'Sharing…' : 'Send invite'}</button>
+                                </form>
+                                {shares.length > 0 && (
+                                    <div>
+                                        <div style={{fontSize:'0.75rem', fontWeight:'700', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.6rem'}}>Currently shared with</div>
+                                        <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+                                            {shares.map(s => (
+                                                <div key={s.id} style={{display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.6rem', background:'var(--surface)', borderRadius:'8px', border:'1px solid var(--border)'}}>
+                                                    <span style={{flex:1, fontSize:'0.85rem', fontWeight:'500'}}>{s.shared_with_email}</span>
+                                                    <span style={{fontSize:'0.72rem', color:'var(--text-muted)', fontWeight:'600'}}>{s.permission}</span>
+                                                    <button onClick={() => removeShare(s.id)} style={{background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', fontSize:'1.1rem', lineHeight:1, padding:'0 0.15rem'}}>×</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Back + Header */}
                     <button onClick={onBack} style={backBtnStyle}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -4764,7 +4928,10 @@
                                 {' · '}{itinerary.travelers} traveler{itinerary.travelers === 1 ? '' : 's'}
                             </div>
                         </div>
-                        <button className="btn" onClick={onDelete} style={{color:'var(--danger)', borderColor:'var(--danger)', fontSize:'0.82rem'}}>Delete Trip</button>
+                        <div style={{display:'flex', gap:'0.5rem'}}>
+                            <button className="btn" onClick={() => setShareOpen(true)} style={{fontSize:'0.82rem'}}>👥 Share</button>
+                            <button className="btn" onClick={onDelete} style={{color:'var(--danger)', borderColor:'var(--danger)', fontSize:'0.82rem'}}>Delete Trip</button>
+                        </div>
                     </div>
 
                     {/* Map */}
@@ -5065,13 +5232,16 @@
                     {builderTab === 'packing' && (
                         <div>
                             <div className="category-block" style={{marginBottom:'1rem'}}>
-                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: packingItems.length > 0 ? '0.6rem' : 0}}>
+                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'0.4rem', marginBottom: packingItems.length > 0 ? '0.6rem' : 0}}>
                                     <div style={{fontWeight:'700', fontSize:'0.9rem', color:'var(--text)'}}>
                                         {packingItems.filter(p => p.checked).length}/{packingItems.length} items packed
                                     </div>
-                                    <button className="btn btn-primary" style={{fontSize:'0.78rem', padding:'0.3rem 0.8rem'}} onClick={generatePacking} disabled={packGenLoad}>
-                                        {packGenLoad ? '✨ Generating…' : '✨ AI Generate'}
-                                    </button>
+                                    <div style={{display:'flex', gap:'0.4rem', flexWrap:'wrap'}}>
+                                        <button className="btn" style={{fontSize:'0.75rem', padding:'0.25rem 0.65rem'}} onClick={loadBaseline} disabled={baselineSaving} title="Add your saved baseline items to this list">📋 Load baseline</button>
+                                        <button className="btn btn-primary" style={{fontSize:'0.78rem', padding:'0.3rem 0.8rem'}} onClick={generatePacking} disabled={packGenLoad}>
+                                            {packGenLoad ? '✨ Generating…' : '✨ AI Generate'}
+                                        </button>
+                                    </div>
                                 </div>
                                 {packingItems.length > 0 && (
                                     <div style={{height:'6px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
@@ -5114,6 +5284,15 @@
                                     </div>
                                 );
                             })}
+
+                            {packingItems.length > 0 && (
+                                <div style={{marginTop:'0.5rem', padding:'0.75rem 0.9rem', background:'var(--surface)', borderRadius:'10px', border:'1px dashed var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.5rem'}}>
+                                    <div style={{fontSize:'0.82rem', color:'var(--text-muted)', fontWeight:'500'}}>Save this list as your default for future trips</div>
+                                    <button className="btn" style={{fontSize:'0.78rem', padding:'0.3rem 0.75rem'}} onClick={saveBaseline} disabled={baselineSaving}>
+                                        {baselineSaving ? 'Saving…' : '💾 Save as my baseline'}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -5121,11 +5300,16 @@
                     {builderTab === 'budget' && (
                         <div>
                             <div className="category-block" style={{marginBottom:'1rem'}}>
-                                <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>Trip Budget</div>
+                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
+                                    <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)'}}>Trip Budget</div>
+                                    <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.7rem'}} onClick={suggestBudget} disabled={budgetSuggestLoad}>
+                                        {budgetSuggestLoad ? '✨ Thinking…' : '✨ Suggest breakdown'}
+                                    </button>
+                                </div>
                                 <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:'0.75rem', alignItems:'end'}}>
                                     <div className="form-group" style={{margin:0}}>
                                         <label>Total Budget</label>
-                                        <input type="number" min="0" step="0.01" value={budget.total} onChange={e => persistBudget({...budget, total: e.target.value})} placeholder="e.g. 2000" />
+                                        <input type="number" min="0" step="0.01" value={budget.total} onChange={e => { persistBudget({...budget, total: e.target.value}); setBudgetSuggestion(null); }} placeholder="e.g. 2000" />
                                     </div>
                                     <div className="form-group" style={{margin:0}}>
                                         <label>Currency</label>
@@ -5134,6 +5318,24 @@
                                         </select>
                                     </div>
                                 </div>
+
+                                {budgetSuggestion && (
+                                    <div style={{marginTop:'1rem', padding:'0.85rem', background:'rgba(14,165,233,0.06)', border:'1.5px solid rgba(14,165,233,0.25)', borderRadius:'10px'}}>
+                                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.6rem'}}>
+                                            <div style={{fontSize:'0.78rem', fontWeight:'700', color:'var(--primary)', textTransform:'uppercase', letterSpacing:'0.05em'}}>✨ AI Suggested Breakdown</div>
+                                            <button onClick={() => setBudgetSuggestion(null)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'1rem', color:'var(--text-muted)', lineHeight:1}}>×</button>
+                                        </div>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.4rem'}}>
+                                            {Object.entries(budgetSuggestion).map(([cat, amt]) => (
+                                                <div key={cat} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.3rem 0.5rem', background:'var(--surface)', borderRadius:'6px', border:'1px solid var(--border)'}}>
+                                                    <span style={{fontSize:'0.8rem', fontWeight:'600', color:'var(--text)'}}>{cat}</span>
+                                                    <span style={{fontSize:'0.8rem', fontWeight:'700', color:EXP_COLORS[cat]||'var(--text)'}}>{curr} {Number(amt).toFixed(0)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <p style={{fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'0.5rem', marginBottom:0}}>These are AI-generated estimates. Adjust based on your travel style.</p>
+                                    </div>
+                                )}
                                 {(() => {
                                     const spent = expenses.reduce((s, e) => s + e.amount, 0);
                                     const budgetAmt = parseFloat(budget.total) || 0;
