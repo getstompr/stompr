@@ -1083,6 +1083,24 @@
             return results;
         }
 
+        async function geocodePlace(query) {
+            if (!query) return null;
+            const cache = getCoordsCache();
+            const key = query.toLowerCase();
+            if (cache[key]) return cache[key];
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`);
+                const data = await res.json();
+                if (data && data[0]) {
+                    const coord = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                    cache[key] = coord;
+                    saveCoordsCache(cache);
+                    return coord;
+                }
+            } catch {}
+            return null;
+        }
+
         function addMarkersToMap(map, places, coordsMap, opts) {
             const markers = [];
             const bounds = [];
@@ -4378,87 +4396,361 @@
         }
 
         function ItineraryBuilder({ itinerary, categories, onBack, onUpdateDays, onDelete, fmtDate, backBtnStyle }) {
-            const { useState, useEffect } = React;
-            const [days, setDays] = useState(itinerary.days || []);
-            const [addingFor, setAddingFor] = useState(null); // date string
-            const [form, setForm] = useState({ time:'', title:'', category:'activity', notes:'' });
+            const { useState, useEffect, useRef } = React;
+            const [days, setDays]           = useState(itinerary.days || []);
+            const [addingFor, setAddingFor] = useState(null);
+            const [form, setForm]           = useState({ time:'', title:'', category:'activity', notes:'' });
+            const [draggingId, setDraggingId]   = useState(null);
+            const [dragOverDate, setDragOverDate] = useState(null);
+            const [suggestions, setSuggestions] = useState([]);
+            const [suggestLoading, setSuggestLoading] = useState(false);
+            const [suggestErr, setSuggestErr]     = useState('');
+            const [showEssentials, setShowEssentials] = useState(true);
+            const [showSuggest, setShowSuggest]       = useState(false);
+            const dragRef = useRef(null);
+            const mapRef  = useRef(null);
+            const mapObj  = useRef(null);
+            const markersRef = useRef([]);
 
-            useEffect(() => { setDays(itinerary.days || []); }, [itinerary.id]);
+            const DAY_COLORS = ['#0EA5E9','#F59E0B','#22C55E','#EC4899','#8B5CF6','#EF4444','#14B8A6','#F97316','#6366F1','#84CC16'];
+
+            useEffect(() => { setDays(itinerary.days || []); setSuggestions([]); }, [itinerary.id]);
+
+            // Backfill geocoords for any items missing lat/lng
+            useEffect(() => {
+                if (!itinerary.destination) return;
+                const allItems = (itinerary.days || []).flatMap(d => d.items);
+                const missing = allItems.filter(i => !i.lat);
+                if (missing.length === 0) return;
+                let cancelled = false;
+                (async () => {
+                    const newDays = (itinerary.days || []).map(d => ({ ...d, items: d.items.map(i => ({...i})) }));
+                    let updated = false;
+                    for (const item of missing) {
+                        if (cancelled) break;
+                        const coord = await geocodePlace(`${item.title}, ${itinerary.destination}`);
+                        await new Promise(r => setTimeout(r, 350));
+                        if (cancelled || !coord) continue;
+                        for (const d of newDays) {
+                            const idx = d.items.findIndex(i => i.id === item.id);
+                            if (idx !== -1) { d.items[idx] = { ...d.items[idx], lat: coord.lat, lng: coord.lng }; updated = true; }
+                        }
+                    }
+                    if (!cancelled && updated) { setDays(newDays); onUpdateDays(newDays); }
+                })();
+                return () => { cancelled = true; };
+            }, [itinerary.id]);
+
+            // Leaflet map init
+            useEffect(() => {
+                if (!mapRef.current || mapObj.current) return;
+                const map = L.map(mapRef.current, { zoomControl: true }).setView([20, 0], 2);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                }).addTo(map);
+                mapObj.current = map;
+                if (itinerary.destination) {
+                    geocodePlace(itinerary.destination).then(coord => {
+                        if (coord && mapObj.current) mapObj.current.setView([coord.lat, coord.lng], 7);
+                    });
+                }
+                return () => { if (mapObj.current) { mapObj.current.remove(); mapObj.current = null; } };
+            }, []);
+
+            // Sync map markers whenever days change
+            useEffect(() => {
+                if (!mapObj.current) return;
+                markersRef.current.forEach(m => m.remove());
+                markersRef.current = [];
+                const bounds = [];
+                days.forEach((day, idx) => {
+                    const color = DAY_COLORS[idx % DAY_COLORS.length];
+                    day.items.forEach(item => {
+                        if (!item.lat) return;
+                        const icon = L.divIcon({
+                            className: '',
+                            html: `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35)"></div>`,
+                            iconSize: [12,12], iconAnchor: [6,6], popupAnchor: [0,-6]
+                        });
+                        const m = L.marker([item.lat, item.lng], { icon }).addTo(mapObj.current);
+                        const ci = categories.find(c => c.value === item.category);
+                        m.bindPopup(`<div style="font-family:Inter,sans-serif;font-size:13px"><strong>${ci ? ci.icon+' ' : ''}${item.title}</strong><br/><span style="color:#888">Day ${idx+1}${item.time ? ' · '+item.time : ''}</span></div>`);
+                        markersRef.current.push(m);
+                        bounds.push([item.lat, item.lng]);
+                    });
+                });
+                if (bounds.length > 1) mapObj.current.fitBounds(bounds, { padding:[30,30], maxZoom:12 });
+                else if (bounds.length === 1) mapObj.current.setView(bounds[0], 12);
+            }, [days]);
 
             const persist = (newDays) => { setDays(newDays); onUpdateDays(newDays); };
 
+            const addItemDirect = async (date, itemData) => {
+                const item = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), ...itemData };
+                const inserted = (cur) => cur.map(d => d.date === date
+                    ? { ...d, items: [...d.items, item].sort((a,b) => (a.time||'99:99').localeCompare(b.time||'99:99')) }
+                    : d);
+                const next = inserted(days);
+                persist(next);
+                // Async geocode, update in place
+                if (itinerary.destination) {
+                    geocodePlace(`${item.title}, ${itinerary.destination}`).then(coord => {
+                        if (!coord) return;
+                        setDays(prev => {
+                            const upd = prev.map(d => d.date === date
+                                ? { ...d, items: d.items.map(i => i.id === item.id ? { ...i, lat: coord.lat, lng: coord.lng } : i) }
+                                : d);
+                            onUpdateDays(upd);
+                            return upd;
+                        });
+                    });
+                }
+            };
+
             const addItem = (date) => {
                 if (!form.title.trim()) return;
-                const item = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), ...form, title: form.title.trim() };
-                const newDays = days.map(d => d.date === date
-                    ? { ...d, items: [...d.items, item].sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99')) }
-                    : d);
-                persist(newDays);
+                addItemDirect(date, { ...form, title: form.title.trim() });
                 setForm({ time:'', title:'', category:'activity', notes:'' });
                 setAddingFor(null);
             };
 
             const removeItem = (date, itemId) => {
-                const newDays = days.map(d => d.date === date ? { ...d, items: d.items.filter(i => i.id !== itemId) } : d);
-                persist(newDays);
+                persist(days.map(d => d.date === date ? { ...d, items: d.items.filter(i => i.id !== itemId) } : d));
             };
 
+            // ── Drag and drop ──
+            const handleDragStart = (e, date, itemId) => {
+                dragRef.current = { date, itemId };
+                setDraggingId(itemId);
+                e.dataTransfer.effectAllowed = 'move';
+            };
+
+            const handleDragEnd = () => { setDraggingId(null); setDragOverDate(null); };
+
+            const handleDrop = (e, targetDate, beforeItemId) => {
+                e.preventDefault();
+                setDragOverDate(null);
+                const src = dragRef.current;
+                if (!src || src.itemId === beforeItemId) return;
+                let moved;
+                let nd = days.map(d => {
+                    if (d.date !== src.date) return d;
+                    moved = d.items.find(i => i.id === src.itemId);
+                    return { ...d, items: d.items.filter(i => i.id !== src.itemId) };
+                });
+                if (!moved) return;
+                nd = nd.map(d => {
+                    if (d.date !== targetDate) return d;
+                    const items = [...d.items];
+                    const idx = beforeItemId ? items.findIndex(i => i.id === beforeItemId) : items.length;
+                    items.splice(idx === -1 ? items.length : idx, 0, moved);
+                    return { ...d, items };
+                });
+                persist(nd);
+                dragRef.current = null;
+                setDraggingId(null);
+            };
+
+            // ── AI Suggestions ──
+            const getSuggestions = async () => {
+                setSuggestLoading(true); setSuggestErr(''); setSuggestions([]);
+                const desc = `${itinerary.travelers}-person trip to ${itinerary.destination || 'an unknown destination'}, ${days.length} days${itinerary.trip_types?.length ? ', type: '+itinerary.trip_types.join(', ') : ''}`;
+                try {
+                    const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
+                        body: {
+                            message: `Suggest 8 specific things to do, eat, or see for a ${desc}. Spread them across all ${days.length} days.`,
+                            systemPrompt: `You are a travel planning expert. Respond ONLY with valid JSON — a raw array, no markdown, no code fences, no explanation. Each element: { "title": string, "category": "flight"|"lodging"|"food"|"activity"|"transport"|"other", "notes": string (one sentence), "day": integer 1–${days.length} }`,
+                            history: []
+                        }
+                    });
+                    if (fnErr || data?.error) {
+                        const code = data?.error || fnErr?.message || '';
+                        setSuggestErr(code === 'no_credits' ? 'No credits remaining.' : code === 'daily_limit' ? 'Daily AI limit reached.' : 'Could not load suggestions.');
+                    } else {
+                        let raw = (data.message || '').trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+                        const parsed = JSON.parse(raw);
+                        setSuggestions(Array.isArray(parsed) ? parsed : []);
+                        setShowSuggest(true);
+                    }
+                } catch { setSuggestErr('Could not parse suggestions — try again.'); }
+                setSuggestLoading(false);
+            };
+
+            const addSuggestion = (s) => {
+                const idx = Math.max(0, Math.min(days.length - 1, (s.day || 1) - 1));
+                addItemDirect(days[idx]?.date, { time:'', title: s.title, category: s.category || 'activity', notes: s.notes || '' });
+                setSuggestions(prev => prev.filter(x => x !== s));
+            };
+
+            // ── Trip Essentials ──
+            const hasType = (date, ...cats) => days.find(d => d.date === date)?.items.some(i => cats.includes(i.category));
+            const quickAdd = (date, cat, title) => { setAddingFor(date); setForm({ time:'', title, category: cat, notes:'' }); };
+
             const catInfo = (val) => categories.find(c => c.value === val) || categories[categories.length - 1];
+            const firstDate = days[0]?.date;
+            const lastDate  = days[days.length - 1]?.date;
+            const nightDays = days.slice(0, days.length > 1 ? -1 : days.length);
+
+            const sectionHeader = (label, open, toggle, extra) => (
+                <div onClick={toggle} style={{display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', userSelect:'none', marginBottom: open ? '0.75rem' : 0}}>
+                    <div style={{fontWeight:'700', fontSize:'0.82rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)'}}>{label}</div>
+                    <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                        {extra}
+                        <span style={{fontSize:'0.7rem', color:'var(--text-muted)'}}>{open ? '▲' : '▼'}</span>
+                    </div>
+                </div>
+            );
 
             return (
                 <div>
+                    {/* ── Back + Header ── */}
                     <button onClick={onBack} style={backBtnStyle}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                         Back to itineraries
                     </button>
-
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'start', marginBottom:'1.5rem', flexWrap:'wrap', gap:'0.75rem'}}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'start', marginBottom:'1.25rem', flexWrap:'wrap', gap:'0.75rem'}}>
                         <div>
-                            <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.25rem'}}>{itinerary.name}</h2>
+                            <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.2rem'}}>{itinerary.name}</h2>
                             <div style={{fontSize:'0.85rem', color:'var(--text-muted)'}}>
                                 {itinerary.destination && <>📍 {itinerary.destination} · </>}
                                 {fmtDate(itinerary.start_date)}{itinerary.end_date !== itinerary.start_date ? ` – ${fmtDate(itinerary.end_date)}` : ''}
                                 {' · '}{itinerary.travelers} traveler{itinerary.travelers === 1 ? '' : 's'}
                             </div>
                         </div>
-                        <button className="btn" onClick={onDelete} style={{color:'var(--danger)', borderColor:'var(--danger)'}}>Delete Trip</button>
+                        <button className="btn" onClick={onDelete} style={{color:'var(--danger)', borderColor:'var(--danger)', fontSize:'0.82rem'}}>Delete Trip</button>
                     </div>
 
+                    {/* ── Map ── */}
+                    <div className="category-block" style={{marginBottom:'1rem', padding:'0.75rem'}}>
+                        <div ref={mapRef} style={{width:'100%', height:'260px', borderRadius:'10px', overflow:'hidden', border:'1px solid var(--border)'}} />
+                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem', marginTop:'0.5rem', alignItems:'center'}}>
+                            {days.map((d, i) => (
+                                <span key={d.date} style={{display:'inline-flex', alignItems:'center', gap:'4px', fontSize:'0.72rem', fontWeight:'600', color:'var(--text-muted)'}}>
+                                    <span style={{width:8, height:8, borderRadius:'50%', background:DAY_COLORS[i % DAY_COLORS.length], display:'inline-block'}}></span>
+                                    Day {i+1}
+                                </span>
+                            ))}
+                            <span style={{fontSize:'0.7rem', color:'var(--text-muted)', marginLeft:'auto'}}>© OpenStreetMap · markers appear as items are geocoded</span>
+                        </div>
+                    </div>
+
+                    {/* ── Trip Essentials ── */}
+                    <div className="category-block" style={{marginBottom:'1rem'}}>
+                        {sectionHeader('Trip Essentials', showEssentials, () => setShowEssentials(v => !v))}
+                        {showEssentials && (
+                            <div style={{display:'flex', flexDirection:'column', gap:'0.45rem'}}>
+                                {[
+                                    { label:`Arrival transport`, date: firstDate, cats:['flight','transport'], defCat:'flight', defTitle:`Arrive in ${itinerary.destination||'destination'}` },
+                                    { label:`Departure transport`, date: lastDate, cats:['flight','transport'], defCat:'flight', defTitle:`Depart ${itinerary.destination||'destination'}` },
+                                    ...nightDays.map((d, i) => ({ label:`Night ${i+1} lodging`, date: d.date, cats:['lodging'], defCat:'lodging', defTitle:'Hotel / accommodation' }))
+                                ].map(row => {
+                                    const done = hasType(row.date, ...row.cats);
+                                    return (
+                                        <div key={row.label} style={{display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 0.6rem', borderRadius:'8px', background: done ? 'rgba(34,197,94,0.06)' : 'var(--surface)', border:'1px solid var(--border)'}}>
+                                            <span style={{fontSize:'1rem', flexShrink:0}}>{done ? '✅' : '⬜'}</span>
+                                            <div style={{flex:1, fontSize:'0.85rem', fontWeight:'600', color: done ? 'var(--success)' : 'var(--text)'}}>{row.label}</div>
+                                            <div style={{fontSize:'0.75rem', color:'var(--text-muted)', flexShrink:0}}>{fmtDate(row.date)}</div>
+                                            {!done && (
+                                                <button className="btn" style={{fontSize:'0.75rem', padding:'0.25rem 0.65rem', flexShrink:0}}
+                                                    onClick={() => quickAdd(row.date, row.defCat, row.defTitle)}>
+                                                    + Add
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ── AI Suggestions ── */}
+                    <div className="category-block" style={{marginBottom:'1rem'}}>
+                        {sectionHeader(
+                            'AI Suggestions',
+                            showSuggest,
+                            () => setShowSuggest(v => !v),
+                            <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.75rem'}}
+                                onClick={(e) => { e.stopPropagation(); getSuggestions(); setShowSuggest(true); }}
+                                disabled={suggestLoading}>
+                                {suggestLoading ? '✨ Thinking…' : '✨ Get Suggestions'}
+                            </button>
+                        )}
+                        {showSuggest && (
+                            <div>
+                                {suggestErr && <p style={{color:'var(--danger)', fontSize:'0.85rem'}}>{suggestErr}</p>}
+                                {!suggestLoading && suggestions.length === 0 && !suggestErr && (
+                                    <p style={{color:'var(--text-muted)', fontSize:'0.85rem', fontStyle:'italic'}}>Click "Get Suggestions" to generate AI-powered ideas for your trip.</p>
+                                )}
+                                <div style={{display:'flex', flexDirection:'column', gap:'0.45rem'}}>
+                                    {suggestions.map((s, i) => {
+                                        const ci = catInfo(s.category);
+                                        const dayIdx = Math.max(0, Math.min(days.length-1, (s.day||1)-1));
+                                        return (
+                                            <div key={i} style={{display:'flex', alignItems:'flex-start', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'8px', padding:'0.6rem 0.75rem'}}>
+                                                <span style={{fontSize:'1.1rem', flexShrink:0}}>{ci.icon}</span>
+                                                <div style={{flex:1, minWidth:0}}>
+                                                    <div style={{fontWeight:'600', fontSize:'0.88rem'}}>{s.title}</div>
+                                                    {s.notes && <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.15rem'}}>{s.notes}</div>}
+                                                </div>
+                                                <div style={{display:'flex', alignItems:'center', gap:'0.4rem', flexShrink:0}}>
+                                                    <span style={{fontSize:'0.72rem', fontWeight:'700', color:DAY_COLORS[dayIdx % DAY_COLORS.length], background:'rgba(0,0,0,0.05)', padding:'2px 7px', borderRadius:'10px'}}>Day {dayIdx+1}</span>
+                                                    <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.65rem'}} onClick={() => addSuggestion(s)}>+ Add</button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ── Day cards ── */}
                     {days.map((day, idx) => (
-                        <div key={day.date} className="category-block" style={{marginBottom:'1rem'}}>
-                            <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>
-                                Day {idx + 1} · {fmtDate(day.date)}
+                        <div key={day.date} className="category-block" style={{marginBottom:'1rem', borderColor: dragOverDate === day.date ? 'var(--primary)' : 'var(--border)', transition:'border-color 0.15s'}}
+                            onDragOver={e => { e.preventDefault(); setDragOverDate(day.date); }}
+                            onDrop={e => handleDrop(e, day.date, null)}>
+                            <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.75rem'}}>
+                                <span style={{width:10, height:10, borderRadius:'50%', background:DAY_COLORS[idx % DAY_COLORS.length], flexShrink:0}}></span>
+                                <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)'}}>
+                                    Day {idx + 1} · {fmtDate(day.date)}
+                                </div>
                             </div>
 
-                            {day.items.length === 0 && (
-                                <p style={{color:'var(--text-muted)', fontSize:'0.85rem', fontStyle:'italic', marginBottom: addingFor === day.date ? '0.75rem' : 0}}>
-                                    No items yet — add a flight, hotel, or activity.
+                            {day.items.length === 0 && addingFor !== day.date && (
+                                <p style={{color:'var(--text-muted)', fontSize:'0.85rem', fontStyle:'italic', marginBottom:0}}>
+                                    Drop items here or click "+ Add item".
                                 </p>
                             )}
 
-                            {day.items.length > 0 && (
-                                <div style={{display:'flex', flexDirection:'column', gap:'0.5rem', marginBottom: addingFor === day.date ? '0.75rem' : 0}}>
-                                    {day.items.map(item => (
-                                        <div key={item.id} style={{display:'flex', alignItems:'flex-start', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.7rem 0.9rem'}}>
-                                            <div style={{fontSize:'1.1rem', flexShrink:0}}>{catInfo(item.category).icon}</div>
-                                            <div style={{flex:1, minWidth:0}}>
-                                                <div style={{display:'flex', alignItems:'baseline', gap:'0.5rem', flexWrap:'wrap'}}>
-                                                    {item.time && <span style={{fontWeight:'700', fontSize:'0.8rem', color:'var(--primary)'}}>{item.time}</span>}
-                                                    <span style={{fontWeight:'600', fontSize:'0.9rem'}}>{item.title}</span>
-                                                </div>
-                                                {item.notes && <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.2rem'}}>{item.notes}</div>}
+                            <div style={{display:'flex', flexDirection:'column', gap:'0.45rem', marginBottom: day.items.length > 0 && addingFor !== day.date ? '0.6rem' : addingFor === day.date && day.items.length > 0 ? '0.6rem' : 0}}>
+                                {day.items.map(item => (
+                                    <div key={item.id}
+                                        draggable
+                                        onDragStart={e => handleDragStart(e, day.date, item.id)}
+                                        onDragEnd={handleDragEnd}
+                                        onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverDate(day.date); }}
+                                        onDrop={e => { e.stopPropagation(); handleDrop(e, day.date, item.id); }}
+                                        style={{display:'flex', alignItems:'flex-start', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.65rem 0.9rem', cursor:'grab', opacity: draggingId === item.id ? 0.4 : 1, transition:'opacity 0.15s'}}>
+                                        <span style={{color:'var(--text-muted)', fontSize:'0.85rem', cursor:'grab', flexShrink:0, marginTop:'2px'}}>⠿</span>
+                                        <div style={{fontSize:'1.05rem', flexShrink:0}}>{catInfo(item.category).icon}</div>
+                                        <div style={{flex:1, minWidth:0}}>
+                                            <div style={{display:'flex', alignItems:'baseline', gap:'0.5rem', flexWrap:'wrap'}}>
+                                                {item.time && <span style={{fontWeight:'700', fontSize:'0.8rem', color:'var(--primary)'}}>{item.time}</span>}
+                                                <span style={{fontWeight:'600', fontSize:'0.88rem'}}>{item.title}</span>
+                                                {item.lat && <span title="On map" style={{fontSize:'0.7rem', color:'var(--text-muted)'}}>📍</span>}
                                             </div>
-                                            <button onClick={() => removeItem(day.date, item.id)} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.2rem', lineHeight:1, padding:'0 0.25rem', flexShrink:0}}>×</button>
+                                            {item.notes && <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.15rem'}}>{item.notes}</div>}
                                         </div>
-                                    ))}
-                                </div>
-                            )}
+                                        <button onClick={() => removeItem(day.date, item.id)} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.2rem', lineHeight:1, padding:'0 0.2rem', flexShrink:0}}>×</button>
+                                    </div>
+                                ))}
+                            </div>
 
                             {addingFor === day.date ? (
                                 <div style={{display:'grid', gap:'0.5rem'}}>
-                                    <div style={{display:'grid', gridTemplateColumns:'110px 1fr 130px', gap:'0.5rem'}}>
+                                    <div style={{display:'grid', gridTemplateColumns:'110px 1fr 140px', gap:'0.5rem'}}>
                                         <input type="time" value={form.time} onChange={e => setForm({...form, time: e.target.value})} />
-                                        <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="e.g. Flight to Rome" autoFocus />
+                                        <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="e.g. Colosseum tour" autoFocus />
                                         <select className="country-select" value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
                                             {categories.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
                                         </select>
@@ -4470,7 +4762,7 @@
                                     </div>
                                 </div>
                             ) : (
-                                <button className="btn" onClick={() => setAddingFor(day.date)} style={{fontSize:'0.82rem'}}>+ Add item</button>
+                                <button className="btn" onClick={() => { setAddingFor(day.date); setForm({ time:'', title:'', category:'activity', notes:'' }); }} style={{fontSize:'0.82rem'}}>+ Add item</button>
                             )}
                         </div>
                     ))}
