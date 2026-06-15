@@ -1021,11 +1021,14 @@
             React.useEffect(() => {
                 if (!destination) return;
                 if (_photoCache[destination]) { setUrl(_photoCache[destination]); return; }
-                fetch(`https://pixabay.com/api/?key=${PIXABAY_KEY}&q=${encodeURIComponent(destination + ' travel')}&image_type=photo&per_page=3&safesearch=true&orientation=horizontal`)
+                fetch(`https://pixabay.com/api/?key=${PIXABAY_KEY}&q=${encodeURIComponent(destination + ' landmark')}&image_type=photo&per_page=10&safesearch=true&orientation=horizontal`)
                     .then(r => r.json())
                     .then(d => {
                         console.log('[Pixabay]', destination, d);
-                        const u = d.hits?.[0]?.webformatURL;
+                        const hits = d.hits || [];
+                        // pick the hit with the most likes as a proxy for "most iconic"
+                        const best = hits.reduce((a, b) => (b.likes > (a?.likes ?? -1) ? b : a), null);
+                        const u = best?.webformatURL;
                         if (u) { _photoCache[destination] = u; setUrl(u); }
                     })
                     .catch(err => console.error('[Pixabay error]', destination, err));
