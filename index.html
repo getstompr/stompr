@@ -4565,8 +4565,8 @@
                         }
                     });
                     if (fnErr || data?.error) {
-                        const code = data?.error || fnErr?.message || '';
-                        setSuggestErr(code === 'no_credits' ? 'No credits remaining.' : code === 'daily_limit' ? 'Daily AI limit reached.' : 'Could not load suggestions.');
+                        const code = fnErr ? ((await fnErr.context?.json?.().catch(() => ({}))).error || fnErr.message) : data?.error;
+                        setSuggestErr(code === 'no_credits' ? 'No credits remaining.' : code === 'daily_limit' ? 'Daily AI limit reached.' : `Could not load suggestions: ${code || 'unknown error'}`);
                     } else {
                         let raw = (data.message || '').trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
                         const parsed = JSON.parse(raw);
@@ -4603,7 +4603,8 @@
                         }
                     });
                     if (fnErr || data?.error) {
-                        alert(data?.error === 'no_credits' ? 'No AI credits remaining.' : data?.error === 'daily_limit' ? 'Daily AI limit reached.' : 'Could not auto-fill. Try again.');
+                        const errCode = fnErr ? ((await fnErr.context?.json?.().catch(() => ({}))).error || fnErr.message) : data?.error;
+                        alert(errCode === 'no_credits' ? 'No AI credits remaining.' : errCode === 'daily_limit' ? 'Daily AI limit reached.' : `Could not auto-fill: ${errCode || 'unknown error'}. Try again.`);
                     } else {
                         let raw = (data.message || '').trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
                         const items = JSON.parse(raw);
