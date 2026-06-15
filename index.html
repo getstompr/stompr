@@ -4486,6 +4486,11 @@ ${buildTripContext(active)}`;
             const [packEnv,        setPackEnv]        = useState('');
             const [showAdvisories, setShowAdvisories] = useState(true);
             const [showSmartSugg,  setShowSmartSugg]  = useState(false);
+            const [foodRecs,       setFoodRecs]       = useState(itinerary.food_recs || []);
+            const [foodGenLoad,    setFoodGenLoad]    = useState(false);
+            const [foodProfile,    setFoodProfile]    = useState(profile?.food_prefs || {});
+            const [foodPrefSave,   setFoodPrefSave]   = useState(false);
+            const [showFoodProfile,setShowFoodProfile]= useState(true);
             const [budgetSubTab,      setBudgetSubTab]       = useState('personal');
             const [budgetSuggestLoad, setBudgetSuggestLoad] = useState(false);
             const [sharedExp,         setSharedExp]         = useState(itinerary.shared_expenses || { travelers: [], logs: [], currency: budget.currency || 'USD', payment_handles: {} });
@@ -4603,6 +4608,7 @@ ${buildTripContext(active)}`;
             const persistShared    = (sd)  => { setSharedExp(sd);       onUpdateItinerary({ shared_expenses: sd }); };
             const persistTransport = (t)   => { setTransport(t);        onUpdateItinerary({ transport: t }); };
             const persistLodging   = (l)   => { setLodging(l);          onUpdateItinerary({ lodging: l }); };
+            const persistFoodRecs  = (r)   => { setFoodRecs(r);         onUpdateItinerary({ food_recs: r }); };
 
             const addItemDirect = async (date, itemData) => {
                 const item = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), ...itemData };
@@ -4735,13 +4741,13 @@ ${buildTripContext(active)}`;
                     `This is Day ${dayIdx + 1} of ${days.length} (${fmtDate(date)})`,
                     itinerary.trip_types?.length ? `Trip type: ${itinerary.trip_types.join(', ')}` : '',
                     `Travelers: ${itinerary.travelers}`,
-                    alreadyHas ? `Already planned: ${alreadyHas}` : '',
+                    alreadyHas ? `Items already on this day (do not duplicate): ${alreadyHas}` : '',
                 ].filter(Boolean).join('. ');
                 try {
                     const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
                         body: {
-                            message: `Create a full day itinerary schedule for Day ${dayIdx + 1}. ${context}. Add breakfast, morning activity, lunch, afternoon activity, dinner, and an optional evening item. Use realistic local times with durations.`,
-                            systemPrompt: `You are a travel planning expert. Respond ONLY with valid JSON — a raw array, no markdown, no code fences, no explanation. Each element must have exactly: { "time": "HH:MM" (24h start), "end_time": "HH:MM" (24h end), "title": string (concise name), "category": "flight"|"lodging"|"food"|"activity"|"transport"|"other", "notes": string (one short sentence) }. Give realistic durations: meals 45-90min, sightseeing 1-3h, transit by distance. Include 5-7 items.`,
+                            message: `Create a complete full-day schedule for Day ${dayIdx + 1}. ${context}. Cover the entire day: morning coffee or hotel breakfast, 2-3 morning sights or activities with specific place names, lunch at a local restaurant, 2-3 afternoon activities, dinner at a recommended spot, and an optional evening activity or bar. Be specific — use real place names.`,
+                            systemPrompt: `You are a travel planning expert. Respond ONLY with valid JSON — a raw array, no markdown, no code fences, no explanation. Each element: { "time": "HH:MM" (24h start), "end_time": "HH:MM" (24h end), "title": string (specific place name + brief action), "category": "flight"|"lodging"|"food"|"activity"|"transport"|"other", "notes": string (one engaging sentence about why it's worth visiting) }. Meals 60-90 min, sightseeing 1-3 h. Include 8-10 items spanning 07:00–22:00.`,
                             history: []
                         }
                     });
@@ -4750,10 +4756,31 @@ ${buildTripContext(active)}`;
                         alert(errCode === 'no_credits' ? 'No AI credits remaining.' : errCode === 'daily_limit' ? 'Daily AI limit reached.' : `Could not auto-fill: ${errCode || 'unknown error'}. Try again.`);
                     } else {
                         let raw = (data.message || '').trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
-                        const items = JSON.parse(raw);
-                        if (Array.isArray(items)) {
-                            for (const it of items) {
-                                await addItemDirect(date, { time: it.time || '', end_time: it.end_time || '', title: it.title, category: it.category || 'activity', notes: it.notes || '' });
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed) && parsed.length) {
+                            // Build all items at once and persist in a single state update
+                            const newItems = parsed.map(it => ({
+                                id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+                                time: it.time || '', end_time: it.end_time || '',
+                                title: it.title, category: it.category || 'activity', notes: it.notes || ''
+                            }));
+                            const next = days.map(d => d.date === date
+                                ? { ...d, items: [...d.items, ...newItems].sort((a,b) => (a.time||'99:99').localeCompare(b.time||'99:99')) }
+                                : d);
+                            persist(next);
+                            if (itinerary.destination) {
+                                newItems.forEach(item => {
+                                    geocodePlace(`${item.title}, ${itinerary.destination}`).then(coord => {
+                                        if (!coord) return;
+                                        setDays(prev => {
+                                            const upd = prev.map(d => d.date === date
+                                                ? { ...d, items: d.items.map(i => i.id === item.id ? { ...i, lat: coord.lat, lng: coord.lng } : i) }
+                                                : d);
+                                            onUpdateItinerary({ days: upd });
+                                            return upd;
+                                        });
+                                    });
+                                });
                             }
                         }
                     }
@@ -4796,6 +4823,53 @@ ${buildTripContext(active)}`;
                            .map(text => ({ id: Date.now().toString(36)+Math.random().toString(36).slice(2), text, category: PACK_CAT_MAP[c.name]||'Other', checked: false }))
                 );
                 if (toAdd.length) persistPack([...packingItems, ...toAdd]);
+            };
+
+            // ── Food helpers ──
+            const saveFoodProfile = async () => {
+                setFoodPrefSave(true);
+                await supabaseClient.from('profiles').update({ food_prefs: foodProfile }).eq('id', session.user.id);
+                setFoodPrefSave(false);
+            };
+
+            const generateFoodRecs = async () => {
+                setFoodGenLoad(true);
+                const cuisines = (foodProfile.cuisines || []).join(', ');
+                const dietary  = (foodProfile.dietary  || []).join(', ');
+                const style    = (foodProfile.style    || []).join(', ');
+                const perPersonPerDay = budget.total && days.length ? parseFloat(budget.total) / days.length / (itinerary.travelers || 1) : null;
+                const budgetLabel = perPersonPerDay ? (perPersonPerDay < 80 ? 'budget-friendly' : perPersonPerDay < 200 ? 'mid-range' : 'upscale') : 'mid-range';
+                try {
+                    const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
+                        body: {
+                            message: `Recommend diverse restaurants in ${itinerary.destination || 'this destination'} for ${itinerary.travelers || 1} traveler${(itinerary.travelers||1)===1?'':'s'}.${cuisines ? ` Favorite cuisines: ${cuisines}.` : ''}${dietary ? ` Dietary needs: ${dietary}.` : ''}${style ? ` Dining style preference: ${style}.` : ''} Budget level: ${budgetLabel}. Trip style: ${(itinerary.trip_types||[]).join(', ')||'leisure'}. Include variety across neighborhoods, price points, and meal times. Prioritize local favorites over tourist traps.`,
+                            systemPrompt: `You are a world-class food critic and local guide. Respond ONLY with valid JSON — a raw array, no markdown, no code fences. Each element: { "name": string, "cuisine": string, "price_range": "$"|"$$"|"$$$"|"$$$$", "description": string (2 engaging sentences on why it's special and a must-visit), "neighborhood": string, "best_for": "Breakfast"|"Lunch"|"Dinner"|"Coffee & Snacks"|"Any meal" }. Give exactly 8 specific, highly-rated restaurants.`,
+                            history: []
+                        }
+                    });
+                    if (!fnErr && !data?.error) {
+                        let raw = (data.message || '').replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+                        const recs = JSON.parse(raw);
+                        if (Array.isArray(recs)) {
+                            persistFoodRecs(recs.map(r => ({ ...r, id: Date.now().toString(36)+Math.random().toString(36).slice(2) })));
+                        }
+                    }
+                } catch {}
+                setFoodGenLoad(false);
+            };
+
+            const addRestToSchedule = (rec) => {
+                const firstDay = days[0]?.date;
+                if (!firstDay) return;
+                const timeMap = { 'Breakfast':'08:00', 'Lunch':'12:30', 'Dinner':'19:00', 'Coffee & Snacks':'10:00', 'Any meal':'12:00' };
+                const endMap  = { 'Breakfast':'09:30', 'Lunch':'14:00', 'Dinner':'21:00', 'Coffee & Snacks':'11:00', 'Any meal':'13:30' };
+                addItemDirect(firstDay, {
+                    time: timeMap[rec.best_for] || '12:00',
+                    end_time: endMap[rec.best_for] || '13:30',
+                    title: rec.name,
+                    category: 'food',
+                    notes: `${rec.cuisine} · ${rec.price_range} · ${rec.neighborhood}`
+                });
             };
 
             const generatePacking = async () => {
@@ -5049,7 +5123,7 @@ ${buildTripContext(active)}`;
 
                     {/* Sub-tabs */}
                     <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.25rem', flexWrap:'wrap'}}>
-                        {[['schedule','🗓️ Schedule'], ['todo','✅ To-Do'], ['transport','✈️ Transport'], ['lodging','🏨 Lodging'], ['packing','🧳 Packing'], ['budget','💰 Budget']].map(([key, label]) => (
+                        {[['schedule','🗓️ Schedule'], ['todo','✅ To-Do'], ['transport','✈️ Transport'], ['lodging','🏨 Lodging'], ['food','🍽️ Food'], ['packing','🧳 Packing'], ['budget','💰 Budget']].map(([key, label]) => (
                             <button key={key} onClick={() => setBuilderTab(key)}
                                 style={{padding:'0.45rem 1.1rem', borderRadius:'999px', border: builderTab===key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: builderTab===key ? 'rgba(14,165,233,0.12)' : 'transparent', color: builderTab===key ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.82rem', cursor:'pointer', transition:'all 0.15s'}}>
                                 {label}
@@ -5878,6 +5952,81 @@ ${buildTripContext(active)}`;
                                     data={sharedExp}
                                     onUpdate={persistShared}
                                 />
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── FOOD TAB ── */}
+                    {builderTab === 'food' && (
+                        <div>
+                            {/* Food profile */}
+                            <div className="category-block" style={{marginBottom:'1rem'}}>
+                                {sectionHeader('🧑‍🍳 My Food Profile', showFoodProfile, () => setShowFoodProfile(v => !v))}
+                                {showFoodProfile && (
+                                    <div>
+                                        {[
+                                            { label:'Favorite Cuisines', key:'cuisines', opts:['Italian','Japanese','Mexican','Thai','Indian','French','Chinese','Mediterranean','American','Middle Eastern','Vietnamese','Korean','Spanish','Greek','Turkish','Ethiopian'] },
+                                            { label:'Dietary', key:'dietary', opts:['Vegetarian','Vegan','Gluten-free','Dairy-free','Halal','Kosher','Nut-free','Shellfish-free'] },
+                                            { label:'Dining Style', key:'style', opts:['Street food & Markets','Casual dining','Mid-range','Fine dining','Rooftop & Views','Local & Authentic','Hidden gems'] },
+                                        ].map(({ label, key, opts }) => (
+                                            <div key={key} style={{marginBottom:'0.85rem'}}>
+                                                <div style={{fontWeight:'600', fontSize:'0.8rem', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.45rem'}}>{label}</div>
+                                                <div style={{display:'flex', flexWrap:'wrap', gap:'0.4rem'}}>
+                                                    {opts.map(o => {
+                                                        const sel = (foodProfile[key]||[]).includes(o);
+                                                        return (
+                                                            <button key={o} onClick={() => setFoodProfile(fp => ({ ...fp, [key]: sel ? (fp[key]||[]).filter(x=>x!==o) : [...(fp[key]||[]), o] }))}
+                                                                style={{padding:'0.28rem 0.7rem', borderRadius:'999px', border: sel ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: sel ? 'rgba(14,165,233,0.1)' : 'transparent', color: sel ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.78rem', cursor:'pointer'}}>
+                                                                {o}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <button className="btn btn-primary" style={{fontSize:'0.78rem', padding:'0.3rem 0.85rem'}} onClick={saveFoodProfile} disabled={foodPrefSave}>
+                                            {foodPrefSave ? 'Saving…' : '💾 Save preferences'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Recommendations header */}
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.85rem', flexWrap:'wrap', gap:'0.5rem'}}>
+                                <div style={{fontWeight:'700', fontSize:'0.9rem', color:'var(--text)'}}>
+                                    {itinerary.destination ? `Restaurants in ${itinerary.destination}` : 'Restaurant Recommendations'}
+                                </div>
+                                <button className="btn btn-primary" style={{fontSize:'0.78rem', padding:'0.3rem 0.85rem'}} onClick={generateFoodRecs} disabled={foodGenLoad}>
+                                    {foodGenLoad ? '✨ Finding spots…' : foodRecs.length ? '🔄 Refresh' : '✨ Get Recommendations'}
+                                </button>
+                            </div>
+
+                            {foodRecs.length === 0 && !foodGenLoad && (
+                                <div style={{textAlign:'center', padding:'2.5rem 1rem', color:'var(--text-muted)'}}>
+                                    <div style={{fontSize:'2.5rem', marginBottom:'0.5rem'}}>🍽️</div>
+                                    <p style={{fontWeight:'500', marginBottom:'0.35rem'}}>No recommendations yet.</p>
+                                    <p style={{fontSize:'0.85rem'}}>Set your food profile above, then tap "✨ Get Recommendations" for AI-curated spots tailored to your taste and destination.</p>
+                                </div>
+                            )}
+
+                            {foodRecs.length > 0 && (
+                                <div style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+                                    {foodRecs.map(rec => (
+                                        <div key={rec.id} style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'12px', padding:'1rem 1.1rem'}}>
+                                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'0.5rem', marginBottom:'0.4rem'}}>
+                                                <div>
+                                                    <div style={{fontWeight:'700', fontSize:'0.95rem', color:'var(--text)'}}>{rec.name}</div>
+                                                    <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'0.1rem'}}>{rec.cuisine} · {rec.price_range} · {rec.neighborhood}</div>
+                                                </div>
+                                                <span style={{fontSize:'0.72rem', fontWeight:'700', padding:'0.18rem 0.55rem', borderRadius:'999px', background:'rgba(14,165,233,0.1)', color:'var(--primary)', flexShrink:0, whiteSpace:'nowrap'}}>{rec.best_for}</span>
+                                            </div>
+                                            <p style={{fontSize:'0.85rem', color:'var(--text)', lineHeight:'1.55', margin:'0 0 0.6rem'}}>{rec.description}</p>
+                                            <button onClick={() => addRestToSchedule(rec)} className="btn" style={{fontSize:'0.75rem', padding:'0.28rem 0.7rem'}}>
+                                                + Add to Day 1 schedule
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
                     )}
