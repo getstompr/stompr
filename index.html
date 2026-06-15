@@ -4342,10 +4342,12 @@
             const [sharePermission,setSharePermission]= useState('view');
             const [sharing,        setSharing]        = useState(false);
             const [shares,         setShares]         = useState([]);
+            const [chatOpen,       setChatOpen]       = useState(false);
             const [chatMsgs,       setChatMsgs]       = useState([]);
             const [chatInput,      setChatInput]      = useState('');
             const [chatLoading,    setChatLoading]    = useState(false);
             const chatBottomRef = useRef(null);
+            const chatInputRef  = useRef(null);
             const dragRef    = useRef(null);
             const mapRef     = useRef(null);
             const mapObj     = useRef(null);
@@ -4702,6 +4704,7 @@
 
             // ── Itinerary chat ──
             useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [chatMsgs, chatLoading]);
+            useEffect(() => { if (chatOpen) setTimeout(() => chatInputRef.current?.focus(), 50); }, [chatOpen]);
 
             const buildTripContext = () => {
                 const dayLines = days.map((d, i) => {
@@ -4859,7 +4862,7 @@ ${buildTripContext()}`;
 
                     {/* Sub-tabs */}
                     <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.25rem', flexWrap:'wrap'}}>
-                        {[['schedule','🗓️ Schedule'], ['packing','🧳 Packing'], ['budget','💰 Budget'], ['chat','💬 Assistant']].map(([key, label]) => (
+                        {[['schedule','🗓️ Schedule'], ['packing','🧳 Packing'], ['budget','💰 Budget']].map(([key, label]) => (
                             <button key={key} onClick={() => setBuilderTab(key)}
                                 style={{padding:'0.45rem 1.1rem', borderRadius:'999px', border: builderTab===key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: builderTab===key ? 'rgba(14,165,233,0.12)' : 'transparent', color: builderTab===key ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.82rem', cursor:'pointer', transition:'all 0.15s'}}>
                                 {label}
@@ -5360,73 +5363,93 @@ ${buildTripContext()}`;
                         </div>
                     )}
 
-                    {/* ── CHAT TAB ── */}
-                    {builderTab === 'chat' && (
-                        <div style={{display:'flex', flexDirection:'column', height:'520px'}}>
-                            {/* Messages */}
-                            <div style={{flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:'0.6rem', padding:'0.25rem 0 0.5rem'}}>
-                                {chatMsgs.length === 0 && (
-                                    <div style={{textAlign:'center', padding:'2.5rem 1rem', color:'var(--text-muted)'}}>
-                                        <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>✈️</div>
-                                        <p style={{fontWeight:'600', marginBottom:'0.35rem', color:'var(--text)'}}>Ask me anything about {itinerary.destination || 'your trip'}</p>
-                                        <p style={{fontSize:'0.85rem', marginBottom:'1.25rem'}}>I know your full itinerary, packing list, and budget — ask for tips, recommendations, or help filling in gaps.</p>
-                                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem', justifyContent:'center'}}>
+                    {/* ── FLOATING CHAT WIDGET ── */}
+                    <div style={{position:'fixed', bottom:'1.5rem', right:'1.5rem', zIndex:500, display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'0.6rem'}}>
+                        {/* Expanded panel */}
+                        {chatOpen && (
+                            <div style={{width:'340px', height:'480px', background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'16px', boxShadow:'0 8px 40px rgba(0,0,0,0.18)', display:'flex', flexDirection:'column', overflow:'hidden'}}>
+                                {/* Header */}
+                                <div style={{display:'flex', alignItems:'center', gap:'0.6rem', padding:'0.75rem 1rem', background:'var(--primary)', borderRadius:'16px 16px 0 0', flexShrink:0}}>
+                                    <span style={{fontSize:'1.1rem'}}>✈️</span>
+                                    <div style={{flex:1, minWidth:0}}>
+                                        <div style={{fontWeight:'700', fontSize:'0.88rem', color:'white', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>Trip Assistant</div>
+                                        <div style={{fontSize:'0.7rem', color:'rgba(255,255,255,0.8)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{itinerary.destination || itinerary.name}</div>
+                                    </div>
+                                    <button onClick={() => setChatOpen(false)} style={{background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'26px', height:'26px', cursor:'pointer', color:'white', fontSize:'1rem', lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>×</button>
+                                </div>
+
+                                {/* Messages */}
+                                <div style={{flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:'0.55rem', padding:'0.75rem'}}>
+                                    {chatMsgs.length === 0 && (
+                                        <div style={{display:'flex', flexDirection:'column', gap:'0.4rem', marginTop:'0.25rem'}}>
+                                            <p style={{fontSize:'0.82rem', color:'var(--text-muted)', margin:'0 0 0.5rem'}}>Ask me anything about this trip — I know your full schedule, packing list, and budget.</p>
                                             {[
                                                 `What should I not miss in ${itinerary.destination || 'the destination'}?`,
                                                 'Are there any gaps in my schedule?',
                                                 'What should I pack that I might be forgetting?',
-                                                'How does my budget look for this trip?',
+                                                'How does my budget look?',
                                             ].map(q => (
-                                                <button key={q} onClick={() => { setChatInput(q); }}
-                                                    style={{fontSize:'0.78rem', padding:'0.4rem 0.85rem', borderRadius:'999px', border:'1.5px solid var(--border)', background:'var(--surface)', color:'var(--text)', cursor:'pointer', fontFamily:'Inter, sans-serif', fontWeight:'500', textAlign:'left', transition:'all 0.15s'}}
+                                                <button key={q} onClick={() => { setChatInput(q); chatInputRef.current?.focus(); }}
+                                                    style={{fontSize:'0.75rem', padding:'0.38rem 0.7rem', borderRadius:'8px', border:'1.5px solid var(--border)', background:'var(--surface)', color:'var(--text)', cursor:'pointer', fontFamily:'Inter, sans-serif', fontWeight:'500', textAlign:'left', transition:'all 0.15s'}}
                                                     onMouseOver={e => { e.currentTarget.style.borderColor='var(--primary)'; e.currentTarget.style.color='var(--primary)'; }}
                                                     onMouseOut={e => { e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.color='var(--text)'; }}>
                                                     {q}
                                                 </button>
                                             ))}
                                         </div>
-                                    </div>
-                                )}
-                                {chatMsgs.map((m, i) => (
-                                    <div key={i} style={{display:'flex', justifyContent: m.role==='user' ? 'flex-end' : 'flex-start'}}>
-                                        <div style={{
-                                            maxWidth:'82%', padding:'0.6rem 0.9rem', borderRadius: m.role==='user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                                            background: m.role==='user' ? 'var(--primary)' : 'var(--surface)',
-                                            color: m.role==='user' ? 'white' : 'var(--text)',
-                                            border: m.role==='user' ? 'none' : '1px solid var(--border)',
-                                            fontSize:'0.87rem', lineHeight:'1.55', whiteSpace:'pre-wrap',
-                                        }}>
-                                            {m.content}
+                                    )}
+                                    {chatMsgs.map((m, i) => (
+                                        <div key={i} style={{display:'flex', justifyContent: m.role==='user' ? 'flex-end' : 'flex-start'}}>
+                                            <div style={{
+                                                maxWidth:'86%', padding:'0.5rem 0.8rem',
+                                                borderRadius: m.role==='user' ? '14px 14px 3px 14px' : '14px 14px 14px 3px',
+                                                background: m.role==='user' ? 'var(--primary)' : 'var(--surface)',
+                                                color: m.role==='user' ? 'white' : 'var(--text)',
+                                                border: m.role==='user' ? 'none' : '1px solid var(--border)',
+                                                fontSize:'0.83rem', lineHeight:'1.5', whiteSpace:'pre-wrap',
+                                            }}>
+                                                {m.content}
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
-                                {chatLoading && (
-                                    <div style={{display:'flex', justifyContent:'flex-start'}}>
-                                        <div style={{padding:'0.6rem 0.9rem', borderRadius:'16px 16px 16px 4px', background:'var(--surface)', border:'1px solid var(--border)', fontSize:'0.87rem', color:'var(--text-muted)'}}>
-                                            <span style={{display:'inline-flex', gap:'3px', alignItems:'center'}}>
-                                                {[0,1,2].map(i => <span key={i} style={{width:'6px', height:'6px', borderRadius:'50%', background:'var(--text-muted)', animation:`bounce 1.2s ${i*0.2}s infinite`}}></span>)}
-                                            </span>
+                                    ))}
+                                    {chatLoading && (
+                                        <div style={{display:'flex', justifyContent:'flex-start'}}>
+                                            <div style={{padding:'0.5rem 0.8rem', borderRadius:'14px 14px 14px 3px', background:'var(--surface)', border:'1px solid var(--border)'}}>
+                                                <span style={{display:'inline-flex', gap:'3px', alignItems:'center'}}>
+                                                    {[0,1,2].map(j => <span key={j} style={{width:'6px', height:'6px', borderRadius:'50%', background:'var(--text-muted)', animation:`bounce 1.2s ${j*0.2}s infinite`}}></span>)}
+                                                </span>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
-                                <div ref={chatBottomRef} />
+                                    )}
+                                    <div ref={chatBottomRef} />
+                                </div>
+
+                                {/* Input */}
+                                <form onSubmit={sendItineraryChat} style={{display:'flex', gap:'0.4rem', padding:'0.6rem 0.75rem', borderTop:'1px solid var(--border)', flexShrink:0}}>
+                                    <input
+                                        ref={chatInputRef}
+                                        type="text"
+                                        value={chatInput}
+                                        onChange={e => setChatInput(e.target.value)}
+                                        placeholder="Ask about your trip…"
+                                        style={{flex:1, fontSize:'0.83rem', padding:'0.45rem 0.65rem'}}
+                                        disabled={chatLoading}
+                                    />
+                                    <button type="submit" className="btn btn-primary" disabled={chatLoading || !chatInput.trim()} style={{flexShrink:0, fontSize:'0.8rem', padding:'0.45rem 0.8rem'}}>
+                                        ↑
+                                    </button>
+                                </form>
                             </div>
-                            {/* Input */}
-                            <form onSubmit={sendItineraryChat} style={{display:'flex', gap:'0.5rem', paddingTop:'0.75rem', borderTop:'1px solid var(--border)', marginTop:'auto'}}>
-                                <input
-                                    type="text"
-                                    value={chatInput}
-                                    onChange={e => setChatInput(e.target.value)}
-                                    placeholder={`Ask about ${itinerary.destination || 'your trip'}…`}
-                                    style={{flex:1, fontSize:'0.88rem'}}
-                                    disabled={chatLoading}
-                                />
-                                <button type="submit" className="btn btn-primary" disabled={chatLoading || !chatInput.trim()} style={{flexShrink:0, fontSize:'0.85rem', padding:'0.5rem 1rem'}}>
-                                    Send
-                                </button>
-                            </form>
-                        </div>
-                    )}
+                        )}
+
+                        {/* Toggle button */}
+                        <button onClick={() => setChatOpen(v => !v)}
+                            style={{width:'52px', height:'52px', borderRadius:'50%', background:'var(--primary)', border:'none', cursor:'pointer', boxShadow:'0 4px 16px rgba(14,165,233,0.45)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.4rem', transition:'transform 0.15s', flexShrink:0}}
+                            onMouseOver={e => e.currentTarget.style.transform='scale(1.08)'}
+                            onMouseOut={e => e.currentTarget.style.transform='scale(1)'}>
+                            {chatOpen ? '×' : '✈️'}
+                        </button>
+                    </div>
                 </div>
             );
         }
