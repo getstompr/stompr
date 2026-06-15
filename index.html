@@ -4407,6 +4407,7 @@
             const [suggestErr, setSuggestErr]     = useState('');
             const [showEssentials, setShowEssentials] = useState(true);
             const [showSuggest, setShowSuggest]       = useState(false);
+            const [fillingDay, setFillingDay]         = useState(null); // date string
             const dragRef = useRef(null);
             const mapRef  = useRef(null);
             const mapObj  = useRef(null);
@@ -4582,6 +4583,40 @@
                 setSuggestions(prev => prev.filter(x => x !== s));
             };
 
+            // ── Auto-fill day ──
+            const autoFillDay = async (date, dayIdx) => {
+                setFillingDay(date);
+                const alreadyHas = days.find(d => d.date === date)?.items.map(i => i.title).join(', ');
+                const context = [
+                    `Destination: ${itinerary.destination || 'unknown'}`,
+                    `This is Day ${dayIdx + 1} of ${days.length} (${fmtDate(date)})`,
+                    itinerary.trip_types?.length ? `Trip type: ${itinerary.trip_types.join(', ')}` : '',
+                    `Travelers: ${itinerary.travelers}`,
+                    alreadyHas ? `Already planned: ${alreadyHas}` : '',
+                ].filter(Boolean).join('. ');
+                try {
+                    const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
+                        body: {
+                            message: `Create a full day itinerary schedule for Day ${dayIdx + 1}. ${context}. Add breakfast, morning activity, lunch, afternoon activity, dinner, and an optional evening item. Use realistic local times.`,
+                            systemPrompt: `You are a travel planning expert. Respond ONLY with valid JSON — a raw array, no markdown, no code fences, no explanation. Each element must have exactly: { "time": "HH:MM" (24h), "title": string (concise name), "category": "flight"|"lodging"|"food"|"activity"|"transport"|"other", "notes": string (one short sentence) }. Include 5-7 items covering the full day.`,
+                            history: []
+                        }
+                    });
+                    if (fnErr || data?.error) {
+                        alert(data?.error === 'no_credits' ? 'No AI credits remaining.' : data?.error === 'daily_limit' ? 'Daily AI limit reached.' : 'Could not auto-fill. Try again.');
+                    } else {
+                        let raw = (data.message || '').trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+                        const items = JSON.parse(raw);
+                        if (Array.isArray(items)) {
+                            for (const it of items) {
+                                await addItemDirect(date, { time: it.time || '', title: it.title, category: it.category || 'activity', notes: it.notes || '' });
+                            }
+                        }
+                    }
+                } catch { alert('Could not parse auto-fill response. Try again.'); }
+                setFillingDay(null);
+            };
+
             // ── Trip Essentials ──
             const hasType = (date, ...cats) => days.find(d => d.date === date)?.items.some(i => cats.includes(i.category));
             const quickAdd = (date, cat, title) => { setAddingFor(date); setForm({ time:'', title, category: cat, notes:'' }); };
@@ -4711,14 +4746,24 @@
                             onDrop={e => handleDrop(e, day.date, null)}>
                             <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.75rem'}}>
                                 <span style={{width:10, height:10, borderRadius:'50%', background:DAY_COLORS[idx % DAY_COLORS.length], flexShrink:0}}></span>
-                                <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)'}}>
+                                <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', flex:1}}>
                                     Day {idx + 1} · {fmtDate(day.date)}
                                 </div>
+                                <button className="btn" style={{fontSize:'0.72rem', padding:'0.2rem 0.6rem', flexShrink:0}}
+                                    disabled={!!fillingDay}
+                                    onClick={() => autoFillDay(day.date, idx)}>
+                                    {fillingDay === day.date ? '✨ Filling…' : '✨ Auto-fill'}
+                                </button>
                             </div>
 
-                            {day.items.length === 0 && addingFor !== day.date && (
+                            {day.items.length === 0 && addingFor !== day.date && fillingDay !== day.date && (
                                 <p style={{color:'var(--text-muted)', fontSize:'0.85rem', fontStyle:'italic', marginBottom:0}}>
-                                    Drop items here or click "+ Add item".
+                                    Drop items here, click "+ Add item", or use ✨ Auto-fill.
+                                </p>
+                            )}
+                            {fillingDay === day.date && (
+                                <p style={{color:'var(--primary)', fontSize:'0.85rem', fontStyle:'italic', marginBottom:'0.5rem'}}>
+                                    ✨ Building your day schedule…
                                 </p>
                             )}
 
