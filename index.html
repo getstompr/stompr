@@ -2107,7 +2107,6 @@
                             <button className={`tab ${activeTab === 'itinerary' ? 'active' : ''}`} onClick={() => setActiveTab('itinerary')}>Itinerary</button>
                             <button className={`tab ${activeTab === 'packing' ? 'active' : ''}`} onClick={() => setActiveTab('packing')}>Packing Lists</button>
                             <button className={`tab ${activeTab === 'places' ? 'active' : ''}`} onClick={() => setActiveTab('places')}>Bucket List & Visited</button>
-                            <button className={`tab ${activeTab === 'expenses' ? 'active' : ''}`} onClick={() => setActiveTab('expenses')}>Budget & Expenses</button>
                             <button className={`tab ${activeTab === 'community' ? 'active' : ''}`} onClick={() => setActiveTab('community')}>Community</button>
                         </div>
                     </header>
@@ -2141,10 +2140,6 @@
                                 <ItineraryView session={session} profile={profile} />
                             )}
 
-                            {activeTab === 'expenses' && (
-                                <ExpensesView />
-                            )}
-
                             {activeTab === 'community' && (
                                 <CommunityView session={session} profile={profile} profilePic={profilePic} places={places} />
                             )}
@@ -2172,168 +2167,12 @@
             );
         }
 
-        function ExpensesView() {
-            const [subTab, setSubTab] = React.useState('budget');
-            return (
-                <div>
-                    <div style={{marginBottom:'1.5rem'}}>
-                        <h2 style={{fontSize:'1.4rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.2rem'}}>Budget & Expenses</h2>
-                        <p style={{color:'var(--text-muted)', fontSize:'0.9rem', marginBottom:'1rem'}}>Plan your budget and track shared costs</p>
-                        <div className="country-subtabs">
-                            <button className={`country-subtab-btn ${subTab === 'budget' ? 'active' : ''}`} onClick={() => setSubTab('budget')}>💰 Budget</button>
-                            <button className={`country-subtab-btn ${subTab === 'split' ? 'active' : ''}`} onClick={() => setSubTab('split')}>🤝 Shared Expenses</button>
-                        </div>
-                    </div>
-                    <div key={subTab} className="tab-content-enter">
-                    {subTab === 'budget' && <BudgetSubView />}
-                    {subTab === 'split' && <SharedExpensesSubView />}
-                    </div>
-                </div>
-            );
-        }
-
-        function BudgetSubView() {
+        function SharedExpensesSubView({ data = null, onUpdate = null }) {
             const ls = (k, fb) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : fb; } catch { return fb; } };
-            const [expenses,     setExpenses]     = React.useState(() => ls('stompr_budget_expenses', []));
-            const [totalBudget,  setTotalBudget]  = React.useState(() => ls('stompr_budget_total', ''));
-            const [currency,     setCurrency]      = React.useState(() => ls('stompr_budget_currency', 'USD'));
-            const [showForm,     setShowForm]      = React.useState(false);
-            const [form, setForm] = React.useState({ description: '', amount: '', category: 'Food', date: new Date().toISOString().split('T')[0] });
-
-            React.useEffect(() => { localStorage.setItem('stompr_budget_expenses', JSON.stringify(expenses)); }, [expenses]);
-            React.useEffect(() => { localStorage.setItem('stompr_budget_total',    JSON.stringify(totalBudget)); }, [totalBudget]);
-            React.useEffect(() => { localStorage.setItem('stompr_budget_currency', JSON.stringify(currency)); }, [currency]);
-            const categories = ['Food', 'Transport', 'Accommodation', 'Activities', 'Shopping', 'Health', 'Other'];
-            const catColors = { Food: '#F59E0B', Transport: '#0EA5E9', Accommodation: '#8B5CF6', Activities: '#22C55E', Shopping: '#EC4899', Health: '#EF4444', Other: '#6B7280' };
-            const currencies = ['USD','EUR','GBP','JPY','AUD','CAD','CHF','CNY','INR','MXN','BRL','SGD','HKD','THB','TRY'];
-
-            const handleAdd = (e) => {
-                e.preventDefault();
-                if (!form.description.trim() || !form.amount) return;
-                setExpenses(prev => [...prev, { ...form, id: Date.now(), amount: parseFloat(form.amount) }]);
-                setForm({ description: '', amount: '', category: 'Food', date: new Date().toISOString().split('T')[0] });
-                setShowForm(false);
-            };
-
-            const total = expenses.reduce((s, e) => s + e.amount, 0);
-            const budget = parseFloat(totalBudget) || 0;
-            const remaining = budget - total;
-            const pct = budget > 0 ? Math.min(100, Math.round(total / budget * 100)) : 0;
-            const byCategory = categories.map(cat => ({ cat, amt: expenses.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0) })).filter(c => c.amt > 0);
-
-            return (
-                <div>
-                    <div className="category-block" style={{marginBottom:'1.25rem'}}>
-                        <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>Trip Budget</div>
-                        <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:'0.75rem', alignItems:'end'}}>
-                            <div className="form-group" style={{margin:0}}>
-                                <label>Total Budget</label>
-                                <input type="number" min="0" step="0.01" value={totalBudget} onChange={e => setTotalBudget(e.target.value)} placeholder="e.g. 2000" />
-                            </div>
-                            <div className="form-group" style={{margin:0}}>
-                                <label>Currency</label>
-                                <select className="country-select" value={currency} onChange={e => setCurrency(e.target.value)} style={{width:'90px'}}>
-                                    {currencies.map(c => <option key={c}>{c}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                        {budget > 0 && (
-                            <div style={{marginTop:'1rem'}}>
-                                <div style={{display:'flex', justifyContent:'space-between', marginBottom:'0.4rem'}}>
-                                    <span style={{fontSize:'0.82rem', color:'var(--text-muted)', fontWeight:'600'}}>{currency} {total.toFixed(2)} spent</span>
-                                    <span style={{fontSize:'0.82rem', fontWeight:'700', color: remaining >= 0 ? 'var(--success)' : 'var(--danger)'}}>
-                                        {remaining >= 0 ? `${currency} ${remaining.toFixed(2)} left` : `${currency} ${Math.abs(remaining).toFixed(2)} over`}
-                                    </span>
-                                </div>
-                                <div style={{height:'8px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
-                                    <div style={{height:'100%', width:`${pct}%`, background: pct < 80 ? 'var(--success)' : pct < 100 ? 'var(--accent)' : 'var(--danger)', borderRadius:'999px', transition:'width 0.4s ease'}}></div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {byCategory.length > 0 && (
-                        <div className="category-block" style={{marginBottom:'1.25rem'}}>
-                            <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>Spending by Category</div>
-                            <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem'}}>
-                                {byCategory.map(({cat, amt}) => (
-                                    <div key={cat} style={{display:'flex', alignItems:'center', gap:'0.4rem', background:'#F7F7F7', borderRadius:'999px', padding:'0.3rem 0.75rem', fontSize:'0.82rem', fontWeight:'600'}}>
-                                        <div style={{width:'8px', height:'8px', borderRadius:'50%', background: catColors[cat], flexShrink:0}}></div>
-                                        {cat}: {currency} {amt.toFixed(2)}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
-                        <span style={{fontWeight:'700', fontSize:'0.95rem'}}>Expenses ({expenses.length})</span>
-                        {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Log Expense</button>}
-                    </div>
-
-                    {showForm && (
-                        <div className="category-block tab-content-enter" style={{marginBottom:'1.25rem'}}>
-                            <form onSubmit={handleAdd}>
-                                <div style={{display:'grid', gap:'0.75rem'}}>
-                                    <div className="form-group" style={{margin:0}}>
-                                        <label>Description</label>
-                                        <input type="text" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="e.g. Dinner, taxi, hotel" required />
-                                    </div>
-                                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
-                                        <div className="form-group" style={{margin:0}}>
-                                            <label>Amount ({currency})</label>
-                                            <input type="number" min="0" step="0.01" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} placeholder="0.00" required />
-                                        </div>
-                                        <div className="form-group" style={{margin:0}}>
-                                            <label>Category</label>
-                                            <select className="country-select" value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
-                                                {categories.map(c => <option key={c}>{c}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div className="form-group" style={{margin:0}}>
-                                        <label>Date</label>
-                                        <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
-                                    </div>
-                                    <div style={{display:'flex', gap:'0.75rem'}}>
-                                        <button type="submit" className="btn btn-primary" style={{flex:1}}>Save</button>
-                                        <button type="button" className="btn" style={{flex:1}} onClick={() => setShowForm(false)}>Cancel</button>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                    )}
-
-                    {expenses.length === 0 && !showForm && (
-                        <div style={{textAlign:'center', padding:'2.5rem 1rem', color:'var(--text-muted)'}}>
-                            <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>💸</div>
-                            <p style={{fontWeight:'500'}}>No expenses logged yet.</p>
-                        </div>
-                    )}
-
-                    <div style={{display:'flex', flexDirection:'column', gap:'0.6rem'}}>
-                        {expenses.map(exp => (
-                            <div key={exp.id} className="tab-content-enter" style={{display:'flex', alignItems:'center', gap:'1rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.9rem 1.1rem', transition:'all 0.2s ease'}}>
-                                <div style={{width:'10px', height:'10px', borderRadius:'50%', background: catColors[exp.category], flexShrink:0}}></div>
-                                <div style={{flex:1, minWidth:0}}>
-                                    <div style={{fontWeight:'600', fontSize:'0.92rem', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{exp.description}</div>
-                                    <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.1rem'}}>{exp.category} · {exp.date}</div>
-                                </div>
-                                <div style={{fontWeight:'700', fontSize:'0.95rem', flexShrink:0}}>{currency} {exp.amount.toFixed(2)}</div>
-                                <button onClick={() => setExpenses(prev => prev.filter(e => e.id !== exp.id))} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.2rem', lineHeight:1, padding:'0 0.25rem'}}>×</button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            );
-        }
-
-        function SharedExpensesSubView() {
-            const ls = (k, fb) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : fb; } catch { return fb; } };
-            const [travelers,      setTravelers]      = React.useState(() => ls('stompr_split_travelers', []));
-            const [logs,           setLogs]            = React.useState(() => ls('stompr_split_logs', []));
-            const [currency,       setCurrency]        = React.useState(() => ls('stompr_split_currency', 'USD'));
-            const [paymentHandles, setPaymentHandles]  = React.useState(() => ls('stompr_split_handles', {}));
+            const [travelers,      setTravelers]      = React.useState(() => data ? (data.travelers || []) : ls('stompr_split_travelers', []));
+            const [logs,           setLogs]            = React.useState(() => data ? (data.logs || []) : ls('stompr_split_logs', []));
+            const [currency,       setCurrency]        = React.useState(() => data ? (data.currency || 'USD') : ls('stompr_split_currency', 'USD'));
+            const [paymentHandles, setPaymentHandles]  = React.useState(() => data ? (data.payment_handles || {}) : ls('stompr_split_handles', {}));
             const [newName,        setNewName]         = React.useState('');
             const [entryMode,      setEntryMode]       = React.useState(null);
             const [logForm,        setLogForm]         = React.useState({ description: '', amount: '', paidBy: '', splitAmong: [], category: 'Food', date: new Date().toISOString().split('T')[0] });
@@ -2345,10 +2184,15 @@
             const [showHandles,    setShowHandles]     = React.useState(false);
             const [copied,         setCopied]          = React.useState('');
 
-            React.useEffect(() => { localStorage.setItem('stompr_split_travelers', JSON.stringify(travelers)); }, [travelers]);
-            React.useEffect(() => { localStorage.setItem('stompr_split_logs',      JSON.stringify(logs)); },      [logs]);
-            React.useEffect(() => { localStorage.setItem('stompr_split_currency',  JSON.stringify(currency)); },  [currency]);
-            React.useEffect(() => { localStorage.setItem('stompr_split_handles',   JSON.stringify(paymentHandles)); }, [paymentHandles]);
+            React.useEffect(() => {
+                if (onUpdate) { onUpdate({ travelers, logs, currency, payment_handles: paymentHandles }); }
+                else {
+                    localStorage.setItem('stompr_split_travelers', JSON.stringify(travelers));
+                    localStorage.setItem('stompr_split_logs',      JSON.stringify(logs));
+                    localStorage.setItem('stompr_split_currency',  JSON.stringify(currency));
+                    localStorage.setItem('stompr_split_handles',   JSON.stringify(paymentHandles));
+                }
+            }, [travelers, logs, currency, paymentHandles]);
             const currencies = ['USD','EUR','GBP','JPY','AUD','CAD','CHF','CNY','INR','MXN','BRL','SGD','HKD','THB','TRY'];
             const expCategories = ['Food', 'Transport', 'Accommodation', 'Activities', 'Shopping', 'Health', 'Other'];
             const catColors = { Food:'#F59E0B', Transport:'#0EA5E9', Accommodation:'#8B5CF6', Activities:'#22C55E', Shopping:'#EC4899', Health:'#EF4444', Other:'#6B7280' };
@@ -4485,8 +4329,9 @@
             const [packInput,      setPackInput]      = useState({ text:'', category:'Clothing' });
             const [packGenLoad,    setPackGenLoad]    = useState(false);
             const [baselineSaving, setBaselineSaving] = useState(false);
+            const [budgetSubTab,      setBudgetSubTab]       = useState('personal');
             const [budgetSuggestLoad, setBudgetSuggestLoad] = useState(false);
-            const [budgetSuggestion,  setBudgetSuggestion]  = useState(null);
+            const [sharedExp,         setSharedExp]         = useState(itinerary.shared_expenses || { travelers: [], logs: [], currency: budget.currency || 'USD', payment_handles: {} });
             const [shareOpen,      setShareOpen]      = useState(false);
             const [shareEmail,     setShareEmail]     = useState('');
             const [sharePermission,setSharePermission]= useState('view');
@@ -4515,6 +4360,7 @@
                 setPackingItems(itinerary.packing_list || []);
                 setBudget(itinerary.budget || { total:'', currency:'USD' });
                 setExpenses(itinerary.expenses || []);
+                setSharedExp(itinerary.shared_expenses || { travelers: [], logs: [], currency: (itinerary.budget || {}).currency || 'USD', payment_handles: {} });
                 setSuggestions([]);
             }, [itinerary.id]);
 
@@ -4589,6 +4435,7 @@
             const persistPack   = (items) => { setPackingItems(items); onUpdateItinerary({ packing_list: items }); };
             const persistBudget = (b)     => { setBudget(b);           onUpdateItinerary({ budget: b }); };
             const persistExp    = (exps)  => { setExpenses(exps);      onUpdateItinerary({ expenses: exps }); };
+            const persistShared = (sd)   => { setSharedExp(sd);        onUpdateItinerary({ shared_expenses: sd }); };
 
             const addItemDirect = async (date, itemData) => {
                 const item = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), ...itemData };
@@ -4821,11 +4668,10 @@
                 persistPack([...packingItems, ...toAdd]);
             };
 
-            // ── AI budget suggestion ──
+            // ── AI budget suggestion (applies directly to budget.categories) ──
             const suggestBudget = async () => {
                 if (!budget.total) { alert('Enter your total budget amount first.'); return; }
                 setBudgetSuggestLoad(true);
-                setBudgetSuggestion(null);
                 const currency = budget.currency || 'USD';
                 const total = parseFloat(budget.total) || 0;
                 const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
@@ -4839,7 +4685,8 @@
                 if (fnErr || data?.error) { alert('Could not generate suggestion. Try again.'); return; }
                 try {
                     let raw = (data.message || '').trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
-                    setBudgetSuggestion(JSON.parse(raw));
+                    const cats = JSON.parse(raw);
+                    persistBudget({ ...budget, categories: cats });
                 } catch { alert('Could not parse suggestion. Try again.'); }
             };
 
@@ -5299,129 +5146,155 @@
                     {/* ── BUDGET TAB ── */}
                     {builderTab === 'budget' && (
                         <div>
-                            <div className="category-block" style={{marginBottom:'1rem'}}>
-                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
-                                    <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)'}}>Trip Budget</div>
-                                    <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.7rem'}} onClick={suggestBudget} disabled={budgetSuggestLoad}>
-                                        {budgetSuggestLoad ? '✨ Thinking…' : '✨ Suggest breakdown'}
+                            {/* Budget sub-tabs */}
+                            <div style={{display:'flex', gap:'0.4rem', marginBottom:'1rem'}}>
+                                {[['personal','💰 My Expenses'],['shared','🤝 Shared']].map(([key, label]) => (
+                                    <button key={key} onClick={() => setBudgetSubTab(key)}
+                                        style={{padding:'0.4rem 1rem', borderRadius:'999px', border: budgetSubTab===key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: budgetSubTab===key ? 'rgba(14,165,233,0.1)' : 'transparent', color: budgetSubTab===key ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.8rem', cursor:'pointer', transition:'all 0.15s'}}>
+                                        {label}
                                     </button>
-                                </div>
-                                <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:'0.75rem', alignItems:'end'}}>
-                                    <div className="form-group" style={{margin:0}}>
-                                        <label>Total Budget</label>
-                                        <input type="number" min="0" step="0.01" value={budget.total} onChange={e => { persistBudget({...budget, total: e.target.value}); setBudgetSuggestion(null); }} placeholder="e.g. 2000" />
-                                    </div>
-                                    <div className="form-group" style={{margin:0}}>
-                                        <label>Currency</label>
-                                        <select className="country-select" value={curr} onChange={e => persistBudget({...budget, currency: e.target.value})} style={{width:'90px'}}>
-                                            {CURRENCIES.map(c => <option key={c}>{c}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                {budgetSuggestion && (
-                                    <div style={{marginTop:'1rem', padding:'0.85rem', background:'rgba(14,165,233,0.06)', border:'1.5px solid rgba(14,165,233,0.25)', borderRadius:'10px'}}>
-                                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.6rem'}}>
-                                            <div style={{fontSize:'0.78rem', fontWeight:'700', color:'var(--primary)', textTransform:'uppercase', letterSpacing:'0.05em'}}>✨ AI Suggested Breakdown</div>
-                                            <button onClick={() => setBudgetSuggestion(null)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'1rem', color:'var(--text-muted)', lineHeight:1}}>×</button>
-                                        </div>
-                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.4rem'}}>
-                                            {Object.entries(budgetSuggestion).map(([cat, amt]) => (
-                                                <div key={cat} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.3rem 0.5rem', background:'var(--surface)', borderRadius:'6px', border:'1px solid var(--border)'}}>
-                                                    <span style={{fontSize:'0.8rem', fontWeight:'600', color:'var(--text)'}}>{cat}</span>
-                                                    <span style={{fontSize:'0.8rem', fontWeight:'700', color:EXP_COLORS[cat]||'var(--text)'}}>{curr} {Number(amt).toFixed(0)}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <p style={{fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'0.5rem', marginBottom:0}}>These are AI-generated estimates. Adjust based on your travel style.</p>
-                                    </div>
-                                )}
-                                {(() => {
-                                    const spent = expenses.reduce((s, e) => s + e.amount, 0);
-                                    const budgetAmt = parseFloat(budget.total) || 0;
-                                    if (!budgetAmt) return null;
-                                    const remaining = budgetAmt - spent;
-                                    const pct = Math.min(100, Math.round(spent / budgetAmt * 100));
-                                    return (
-                                        <div style={{marginTop:'1rem'}}>
-                                            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'0.4rem'}}>
-                                                <span style={{fontSize:'0.82rem', color:'var(--text-muted)', fontWeight:'600'}}>{curr} {spent.toFixed(2)} spent</span>
-                                                <span style={{fontSize:'0.82rem', fontWeight:'700', color: remaining >= 0 ? 'var(--success)' : 'var(--danger)'}}>
-                                                    {remaining >= 0 ? `${curr} ${remaining.toFixed(2)} left` : `${curr} ${Math.abs(remaining).toFixed(2)} over budget`}
-                                                </span>
-                                            </div>
-                                            <div style={{height:'8px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
-                                                <div style={{height:'100%', width:`${pct}%`, background: pct < 80 ? 'var(--success)' : pct < 100 ? '#F59E0B' : 'var(--danger)', borderRadius:'999px', transition:'width 0.4s ease'}}></div>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-                            </div>
-
-                            {(() => {
-                                const byCat = EXP_CATS.map(cat => ({ cat, amt: expenses.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0) })).filter(c => c.amt > 0);
-                                if (!byCat.length) return null;
-                                return (
-                                    <div className="category-block" style={{marginBottom:'1rem'}}>
-                                        <div style={{fontWeight:'700', fontSize:'0.82rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>By Category</div>
-                                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem'}}>
-                                            {byCat.map(({cat, amt}) => (
-                                                <span key={cat} style={{display:'inline-flex', alignItems:'center', gap:'0.4rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'999px', padding:'0.3rem 0.75rem', fontSize:'0.82rem', fontWeight:'600'}}>
-                                                    <span style={{width:'8px', height:'8px', borderRadius:'50%', background:EXP_COLORS[cat], flexShrink:0, display:'inline-block'}}></span>
-                                                    {cat}: {curr} {amt.toFixed(2)}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-
-                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
-                                <span style={{fontWeight:'700', fontSize:'0.9rem'}}>Expenses ({expenses.length})</span>
-                                {!showExpForm && <button className="btn btn-primary" onClick={() => setShowExpForm(true)} style={{fontSize:'0.82rem'}}>+ Log Expense</button>}
-                            </div>
-
-                            {showExpForm && (
-                                <div className="category-block" style={{marginBottom:'1rem'}}>
-                                    <form onSubmit={addExpense}>
-                                        <div style={{display:'grid', gap:'0.55rem'}}>
-                                            <input type="text" value={expForm.description} onChange={e => setExpForm({...expForm, description: e.target.value})} placeholder="e.g. Dinner, taxi, museum ticket" required />
-                                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0.5rem'}}>
-                                                <input type="number" min="0" step="0.01" value={expForm.amount} onChange={e => setExpForm({...expForm, amount: e.target.value})} placeholder={`Amount (${curr})`} required />
-                                                <select className="country-select" value={expForm.category} onChange={e => setExpForm({...expForm, category: e.target.value})}>
-                                                    {EXP_CATS.map(c => <option key={c}>{c}</option>)}
-                                                </select>
-                                                <input type="date" value={expForm.date} onChange={e => setExpForm({...expForm, date: e.target.value})} />
-                                            </div>
-                                            <div style={{display:'flex', gap:'0.5rem'}}>
-                                                <button type="submit" className="btn btn-primary" style={{flex:1, fontSize:'0.82rem'}}>Save</button>
-                                                <button type="button" className="btn" onClick={() => setShowExpForm(false)} style={{flex:1, fontSize:'0.82rem'}}>Cancel</button>
-                                            </div>
-                                        </div>
-                                    </form>
-                                </div>
-                            )}
-
-                            {expenses.length === 0 && !showExpForm && (
-                                <div style={{textAlign:'center', padding:'2rem 1rem', color:'var(--text-muted)'}}>
-                                    <div style={{fontSize:'2rem', marginBottom:'0.5rem'}}>💸</div>
-                                    <p style={{fontWeight:'500'}}>No expenses logged yet.</p>
-                                </div>
-                            )}
-
-                            <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
-                                {expenses.map(exp => (
-                                    <div key={exp.id} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'8px', padding:'0.75rem 0.9rem'}}>
-                                        <div style={{width:'10px', height:'10px', borderRadius:'50%', background:EXP_COLORS[exp.category]||'#6B7280', flexShrink:0}}></div>
-                                        <div style={{flex:1, minWidth:0}}>
-                                            <div style={{fontWeight:'600', fontSize:'0.88rem'}}>{exp.description}</div>
-                                            <div style={{fontSize:'0.75rem', color:'var(--text-muted)', marginTop:'0.1rem'}}>{exp.category} · {exp.date}</div>
-                                        </div>
-                                        <div style={{fontWeight:'700', fontSize:'0.9rem', flexShrink:0}}>{curr} {exp.amount.toFixed(2)}</div>
-                                        <button onClick={() => removeExp(exp.id)} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.2rem', lineHeight:1, padding:'0 0.25rem'}}>×</button>
-                                    </div>
                                 ))}
                             </div>
+
+                            {budgetSubTab === 'personal' && (
+                                <div>
+                                    {/* Total budget + currency + AI suggest */}
+                                    <div className="category-block" style={{marginBottom:'1rem'}}>
+                                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
+                                            <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)'}}>Trip Budget</div>
+                                            <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.7rem'}} onClick={suggestBudget} disabled={budgetSuggestLoad}>
+                                                {budgetSuggestLoad ? '✨ Thinking…' : '✨ AI Suggest'}
+                                            </button>
+                                        </div>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:'0.75rem', alignItems:'end', marginBottom:'1rem'}}>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label>Total Budget</label>
+                                                <input type="number" min="0" step="0.01" value={budget.total} onChange={e => persistBudget({...budget, total: e.target.value})} placeholder="e.g. 2000" />
+                                            </div>
+                                            <div className="form-group" style={{margin:0}}>
+                                                <label>Currency</label>
+                                                <select className="country-select" value={curr} onChange={e => persistBudget({...budget, currency: e.target.value})} style={{width:'90px'}}>
+                                                    {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* Overall progress bar */}
+                                        {(() => {
+                                            const spent = expenses.reduce((s, e) => s + e.amount, 0);
+                                            const budgetAmt = parseFloat(budget.total) || 0;
+                                            if (!budgetAmt) return null;
+                                            const remaining = budgetAmt - spent;
+                                            const pct = Math.min(100, Math.round(spent / budgetAmt * 100));
+                                            return (
+                                                <div style={{marginBottom:'0.5rem'}}>
+                                                    <div style={{display:'flex', justifyContent:'space-between', marginBottom:'0.35rem'}}>
+                                                        <span style={{fontSize:'0.82rem', color:'var(--text-muted)', fontWeight:'600'}}>{curr} {spent.toFixed(2)} spent</span>
+                                                        <span style={{fontSize:'0.82rem', fontWeight:'700', color: remaining >= 0 ? 'var(--success)' : 'var(--danger)'}}>
+                                                            {remaining >= 0 ? `${curr} ${remaining.toFixed(2)} left` : `${curr} ${Math.abs(remaining).toFixed(2)} over`}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{height:'8px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
+                                                        <div style={{height:'100%', width:`${pct}%`, background: pct < 80 ? 'var(--success)' : pct < 100 ? '#F59E0B' : 'var(--danger)', borderRadius:'999px', transition:'width 0.4s ease'}}></div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    {/* Category allocations (persist in budget.categories) */}
+                                    <div className="category-block" style={{marginBottom:'1rem'}}>
+                                        <div style={{fontWeight:'700', fontSize:'0.82rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--text-muted)', marginBottom:'0.7rem'}}>
+                                            Category Allocations
+                                            {budgetSuggestLoad && <span style={{marginLeft:'0.5rem', fontSize:'0.7rem', color:'var(--primary)'}}>✨ AI filling…</span>}
+                                        </div>
+                                        <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+                                            {EXP_CATS.map(cat => {
+                                                const allocated = parseFloat((budget.categories || {})[cat] || 0);
+                                                const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0);
+                                                const pct = allocated > 0 ? Math.min(100, Math.round(spent / allocated * 100)) : 0;
+                                                return (
+                                                    <div key={cat} style={{display:'grid', gridTemplateColumns:'90px 80px 1fr', gap:'0.5rem', alignItems:'center'}}>
+                                                        <div style={{display:'flex', alignItems:'center', gap:'0.4rem'}}>
+                                                            <span style={{width:'8px', height:'8px', borderRadius:'50%', background:EXP_COLORS[cat], flexShrink:0, display:'inline-block'}}></span>
+                                                            <span style={{fontSize:'0.8rem', fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{cat}</span>
+                                                        </div>
+                                                        <input type="number" min="0" step="1" value={(budget.categories || {})[cat] || ''}
+                                                            onChange={e => persistBudget({ ...budget, categories: { ...(budget.categories || {}), [cat]: parseFloat(e.target.value) || 0 } })}
+                                                            placeholder="0" style={{fontSize:'0.82rem', padding:'0.3rem 0.5rem', textAlign:'right'}} />
+                                                        <div style={{display:'flex', alignItems:'center', gap:'0.4rem'}}>
+                                                            <div style={{flex:1, height:'6px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
+                                                                <div style={{height:'100%', width:`${pct}%`, background: pct < 80 ? EXP_COLORS[cat] : pct < 100 ? '#F59E0B' : 'var(--danger)', borderRadius:'999px', transition:'width 0.4s ease'}}></div>
+                                                            </div>
+                                                            <span style={{fontSize:'0.7rem', color:'var(--text-muted)', whiteSpace:'nowrap', minWidth:'52px', textAlign:'right'}}>
+                                                                {curr} {spent.toFixed(0)}{allocated > 0 ? ` / ${allocated.toFixed(0)}` : ''}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        {budget.total && !Object.keys(budget.categories || {}).length && (
+                                            <p style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.65rem', marginBottom:0}}>Enter amounts per category, or click ✨ AI Suggest to auto-fill.</p>
+                                        )}
+                                    </div>
+
+                                    {/* Expense log */}
+                                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
+                                        <span style={{fontWeight:'700', fontSize:'0.9rem'}}>Expenses ({expenses.length})</span>
+                                        {!showExpForm && <button className="btn btn-primary" onClick={() => setShowExpForm(true)} style={{fontSize:'0.82rem'}}>+ Log Expense</button>}
+                                    </div>
+
+                                    {showExpForm && (
+                                        <div className="category-block" style={{marginBottom:'1rem'}}>
+                                            <form onSubmit={addExpense}>
+                                                <div style={{display:'grid', gap:'0.55rem'}}>
+                                                    <input type="text" value={expForm.description} onChange={e => setExpForm({...expForm, description: e.target.value})} placeholder="e.g. Dinner, taxi, museum ticket" required />
+                                                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0.5rem'}}>
+                                                        <input type="number" min="0" step="0.01" value={expForm.amount} onChange={e => setExpForm({...expForm, amount: e.target.value})} placeholder={`Amount (${curr})`} required />
+                                                        <select className="country-select" value={expForm.category} onChange={e => setExpForm({...expForm, category: e.target.value})}>
+                                                            {EXP_CATS.map(c => <option key={c}>{c}</option>)}
+                                                        </select>
+                                                        <input type="date" value={expForm.date} onChange={e => setExpForm({...expForm, date: e.target.value})} />
+                                                    </div>
+                                                    <div style={{display:'flex', gap:'0.5rem'}}>
+                                                        <button type="submit" className="btn btn-primary" style={{flex:1, fontSize:'0.82rem'}}>Save</button>
+                                                        <button type="button" className="btn" onClick={() => setShowExpForm(false)} style={{flex:1, fontSize:'0.82rem'}}>Cancel</button>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    )}
+
+                                    {expenses.length === 0 && !showExpForm && (
+                                        <div style={{textAlign:'center', padding:'2rem 1rem', color:'var(--text-muted)'}}>
+                                            <div style={{fontSize:'2rem', marginBottom:'0.5rem'}}>💸</div>
+                                            <p style={{fontWeight:'500'}}>No expenses logged yet.</p>
+                                        </div>
+                                    )}
+
+                                    <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+                                        {expenses.map(exp => (
+                                            <div key={exp.id} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'8px', padding:'0.75rem 0.9rem'}}>
+                                                <div style={{width:'10px', height:'10px', borderRadius:'50%', background:EXP_COLORS[exp.category]||'#6B7280', flexShrink:0}}></div>
+                                                <div style={{flex:1, minWidth:0}}>
+                                                    <div style={{fontWeight:'600', fontSize:'0.88rem'}}>{exp.description}</div>
+                                                    <div style={{fontSize:'0.75rem', color:'var(--text-muted)', marginTop:'0.1rem'}}>{exp.category} · {exp.date}</div>
+                                                </div>
+                                                <div style={{fontWeight:'700', fontSize:'0.9rem', flexShrink:0}}>{curr} {exp.amount.toFixed(2)}</div>
+                                                <button onClick={() => removeExp(exp.id)} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.2rem', lineHeight:1, padding:'0 0.25rem'}}>×</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {budgetSubTab === 'shared' && (
+                                <SharedExpensesSubView
+                                    data={sharedExp}
+                                    onUpdate={persistShared}
+                                />
+                            )}
                         </div>
                     )}
                 </div>
