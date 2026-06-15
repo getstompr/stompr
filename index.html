@@ -1013,6 +1013,27 @@
             'sb_publishable_EqqOV0ptjB2hgIhqVsITUA_gDTB6L6n'
         );
 
+        const PIXABAY_KEY = '56312802-9824422cc085a8cee209e6dd8';
+        const _photoCache = {};
+
+        function DestinationPhoto({ destination, height = 160, borderRadius = '12px', children }) {
+            const [url, setUrl] = React.useState(() => _photoCache[destination] || null);
+            React.useEffect(() => {
+                if (!destination) return;
+                if (_photoCache[destination]) { setUrl(_photoCache[destination]); return; }
+                fetch(`https://pixabay.com/api/?key=${PIXABAY_KEY}&q=${encodeURIComponent(destination + ' travel')}&image_type=photo&per_page=3&safesearch=true&orientation=horizontal`)
+                    .then(r => r.json())
+                    .then(d => { const u = d.hits?.[0]?.webformatURL; if (u) { _photoCache[destination] = u; setUrl(u); } })
+                    .catch(() => {});
+            }, [destination]);
+            return (
+                <div style={{position:'relative', height, backgroundImage: url ? `url(${url})` : 'none', backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'var(--surface)', borderRadius, overflow:'hidden', flexShrink:0}}>
+                    {!url && <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-muted)', fontSize:'1.5rem'}}>🌍</div>}
+                    {children}
+                </div>
+            );
+        }
+
         const TRAVEL_INTERESTS = [
             { label: 'Food & Cuisine', icon: '🍜' },
             { label: 'Culture & Museums', icon: '🏛️' },
@@ -4253,26 +4274,27 @@ ${buildTripContext(active)}`;
                         )}
                         <div className="places-grid">
                             {itineraries.map(it => (
-                                <div key={it.id} className="category-block" style={{cursor:'pointer'}} onClick={() => { setActiveId(it.id); setView('builder'); }}>
-                                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'start'}}>
-                                        <div>
-                                            <h3 style={{fontSize:'1.05rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.25rem'}}>{it.name}</h3>
-                                            {it.destination && <div style={{fontSize:'0.85rem', color:'var(--text-muted)'}}>📍 {it.destination}</div>}
+                                <div key={it.id} className="category-block" style={{cursor:'pointer', padding:0, overflow:'hidden'}} onClick={() => { setActiveId(it.id); setView('builder'); }}>
+                                    <DestinationPhoto destination={it.destination} height={140} borderRadius="0">
+                                        <div style={{position:'absolute', inset:0, background:'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 55%)'}} />
+                                        <button className="delete-btn" onClick={(e) => { e.stopPropagation(); deleteItinerary(it.id); }} style={{position:'absolute', top:'0.5rem', right:'0.5rem', background:'rgba(0,0,0,0.35)', color:'#fff', border:'none'}}>×</button>
+                                        {it.destination && <div style={{position:'absolute', bottom:'0.6rem', left:'0.75rem', color:'#fff', fontSize:'0.8rem', fontWeight:'600', textShadow:'0 1px 3px rgba(0,0,0,0.5)'}}>📍 {it.destination}</div>}
+                                    </DestinationPhoto>
+                                    <div style={{padding:'0.85rem 1rem'}}>
+                                        <h3 style={{fontSize:'1.05rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.25rem'}}>{it.name}</h3>
+                                        <div style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>
+                                            {it.start_date && fmtDate(it.start_date)}{it.end_date && it.end_date !== it.start_date ? ` – ${fmtDate(it.end_date)}` : ''}
+                                            {' · '}{(it.days || []).length} day{(it.days || []).length === 1 ? '' : 's'}
+                                            {' · '}{it.travelers} traveler{it.travelers === 1 ? '' : 's'}
                                         </div>
-                                        <button className="delete-btn" onClick={(e) => { e.stopPropagation(); deleteItinerary(it.id); }}>×</button>
+                                        {it.trip_types && it.trip_types.length > 0 && (
+                                            <div style={{display:'flex', flexWrap:'wrap', gap:'0.35rem', marginTop:'0.6rem'}}>
+                                                {it.trip_types.map(t => (
+                                                    <span key={t} style={{fontSize:'0.72rem', fontWeight:'600', color:'var(--primary)', background:'rgba(14,165,233,0.1)', padding:'2px 8px', borderRadius:'10px'}}>{t}</span>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
-                                    <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'0.6rem'}}>
-                                        {it.start_date && fmtDate(it.start_date)}{it.end_date && it.end_date !== it.start_date ? ` – ${fmtDate(it.end_date)}` : ''}
-                                        {' · '}{(it.days || []).length} day{(it.days || []).length === 1 ? '' : 's'}
-                                        {' · '}{it.travelers} traveler{it.travelers === 1 ? '' : 's'}
-                                    </div>
-                                    {it.trip_types && it.trip_types.length > 0 && (
-                                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.35rem', marginTop:'0.6rem'}}>
-                                            {it.trip_types.map(t => (
-                                                <span key={t} style={{fontSize:'0.72rem', fontWeight:'600', color:'var(--primary)', background:'rgba(14,165,233,0.1)', padding:'2px 8px', borderRadius:'10px'}}>{t}</span>
-                                            ))}
-                                        </div>
-                                    )}
                                 </div>
                             ))}
                         </div>
@@ -4282,17 +4304,18 @@ ${buildTripContext(active)}`;
                                 <h3 style={{fontSize:'1rem', fontWeight:'700', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.85rem'}}>Shared with me</h3>
                                 <div className="places-grid">
                                     {sharedItineraries.map(it => (
-                                        <div key={it.id} className="category-block" style={{cursor:'pointer', borderColor:'rgba(139,92,246,0.35)'}} onClick={() => { setActiveId(it.id); setView('builder'); }}>
-                                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'start'}}>
-                                                <div>
-                                                    <h3 style={{fontSize:'1.05rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.25rem'}}>{it.name}</h3>
-                                                    {it.destination && <div style={{fontSize:'0.85rem', color:'var(--text-muted)'}}>📍 {it.destination}</div>}
+                                        <div key={it.id} className="category-block" style={{cursor:'pointer', padding:0, overflow:'hidden', borderColor:'rgba(139,92,246,0.35)'}} onClick={() => { setActiveId(it.id); setView('builder'); }}>
+                                            <DestinationPhoto destination={it.destination} height={140} borderRadius="0">
+                                                <div style={{position:'absolute', inset:0, background:'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 55%)'}} />
+                                                <span style={{position:'absolute', top:'0.5rem', right:'0.5rem', fontSize:'0.7rem', fontWeight:'700', color:'#fff', background:'rgba(139,92,246,0.75)', padding:'3px 8px', borderRadius:'999px'}}>Shared</span>
+                                                {it.destination && <div style={{position:'absolute', bottom:'0.6rem', left:'0.75rem', color:'#fff', fontSize:'0.8rem', fontWeight:'600', textShadow:'0 1px 3px rgba(0,0,0,0.5)'}}>📍 {it.destination}</div>}
+                                            </DestinationPhoto>
+                                            <div style={{padding:'0.85rem 1rem'}}>
+                                                <h3 style={{fontSize:'1.05rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.25rem'}}>{it.name}</h3>
+                                                <div style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>
+                                                    {it.start_date && fmtDate(it.start_date)}{it.end_date && it.end_date !== it.start_date ? ` – ${fmtDate(it.end_date)}` : ''}
+                                                    {' · '}{(it.days || []).length} day{(it.days || []).length === 1 ? '' : 's'}
                                                 </div>
-                                                <span style={{fontSize:'0.7rem', fontWeight:'700', color:'#8B5CF6', background:'rgba(139,92,246,0.1)', padding:'3px 8px', borderRadius:'999px', flexShrink:0}}>Shared</span>
-                                            </div>
-                                            <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'0.6rem'}}>
-                                                {it.start_date && fmtDate(it.start_date)}{it.end_date && it.end_date !== it.start_date ? ` – ${fmtDate(it.end_date)}` : ''}
-                                                {' · '}{(it.days || []).length} day{(it.days || []).length === 1 ? '' : 's'}
                                             </div>
                                         </div>
                                     ))}
@@ -4929,11 +4952,32 @@ ${buildTripContext(active)}`;
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                         Back to itineraries
                     </button>
+
+                    {/* Destination hero */}
+                    {itinerary.destination && (
+                        <DestinationPhoto destination={itinerary.destination} height={200} borderRadius="14px" style={{marginBottom:'1.25rem'}}>
+                            <div style={{position:'absolute', inset:0, background:'linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.1) 60%)', borderRadius:'14px'}} />
+                            <div style={{position:'absolute', bottom:'1rem', left:'1.1rem', right:'1.1rem', display:'flex', justifyContent:'space-between', alignItems:'flex-end', gap:'0.75rem'}}>
+                                <div>
+                                    <div style={{color:'#fff', fontWeight:'800', fontSize:'1.2rem', textShadow:'0 2px 6px rgba(0,0,0,0.4)', lineHeight:1.2}}>{itinerary.name}</div>
+                                    <div style={{color:'rgba(255,255,255,0.88)', fontSize:'0.82rem', marginTop:'0.2rem', textShadow:'0 1px 3px rgba(0,0,0,0.5)'}}>
+                                        📍 {itinerary.destination} · {fmtDate(itinerary.start_date)}{itinerary.end_date !== itinerary.start_date ? ` – ${fmtDate(itinerary.end_date)}` : ''}
+                                    </div>
+                                </div>
+                                <div style={{display:'flex', gap:'0.4rem', flexShrink:0}}>
+                                    <button className="btn" onClick={() => setShareOpen(true)} style={{fontSize:'0.78rem', background:'rgba(255,255,255,0.15)', color:'#fff', borderColor:'rgba(255,255,255,0.3)', backdropFilter:'blur(4px)'}}>👥 Share</button>
+                                    <button className="btn" onClick={onDelete} style={{fontSize:'0.78rem', background:'rgba(255,255,255,0.15)', color:'#fff', borderColor:'rgba(255,255,255,0.3)', backdropFilter:'blur(4px)'}}>Delete</button>
+                                </div>
+                            </div>
+                        </DestinationPhoto>
+                    )}
+
+                    {/* Header (shown only when no destination photo) */}
+                    {!itinerary.destination && (
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'start', marginBottom:'1.25rem', flexWrap:'wrap', gap:'0.75rem'}}>
                         <div>
                             <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'var(--text)', marginBottom:'0.2rem'}}>{itinerary.name}</h2>
                             <div style={{fontSize:'0.85rem', color:'var(--text-muted)'}}>
-                                {itinerary.destination && <>📍 {itinerary.destination} · </>}
                                 {fmtDate(itinerary.start_date)}{itinerary.end_date !== itinerary.start_date ? ` – ${fmtDate(itinerary.end_date)}` : ''}
                                 {' · '}{itinerary.travelers} traveler{itinerary.travelers === 1 ? '' : 's'}
                             </div>
@@ -4943,6 +4987,7 @@ ${buildTripContext(active)}`;
                             <button className="btn" onClick={onDelete} style={{color:'var(--danger)', borderColor:'var(--danger)', fontSize:'0.82rem'}}>Delete Trip</button>
                         </div>
                     </div>
+                    )}
 
                     {/* Map */}
                     <div className="category-block" style={{marginBottom:'1rem', padding:'0.75rem'}}>
