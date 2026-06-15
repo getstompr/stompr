@@ -4270,9 +4270,9 @@
                 if (activeId === id) { setActiveId(null); setView('list'); }
             };
 
-            const updateDays = async (id, days) => {
-                setItineraries(prev => prev.map(i => i.id === id ? { ...i, days } : i));
-                await supabaseClient.from('itineraries').update({ days, updated_at: new Date().toISOString() }).eq('id', id);
+            const updateItinerary = async (id, fields) => {
+                setItineraries(prev => prev.map(i => i.id === id ? { ...i, ...fields } : i));
+                await supabaseClient.from('itineraries').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', id);
             };
 
             const active = itineraries.find(i => i.id === activeId);
@@ -4384,7 +4384,7 @@
                         itinerary={active}
                         categories={CATEGORIES}
                         onBack={() => { setActiveId(null); setView('list'); }}
-                        onUpdateDays={(days) => updateDays(active.id, days)}
+                        onUpdateItinerary={(fields) => updateItinerary(active.id, fields)}
                         onDelete={() => deleteItinerary(active.id)}
                         fmtDate={fmtDate}
                         backBtnStyle={backBtnStyle}
@@ -4395,27 +4395,54 @@
             return null;
         }
 
-        function ItineraryBuilder({ itinerary, categories, onBack, onUpdateDays, onDelete, fmtDate, backBtnStyle }) {
+        function ItineraryBuilder({ itinerary, categories, onBack, onUpdateItinerary, onDelete, fmtDate, backBtnStyle }) {
             const { useState, useEffect, useRef } = React;
-            const [days, setDays]           = useState(itinerary.days || []);
-            const [addingFor, setAddingFor] = useState(null);
-            const [form, setForm]           = useState({ time:'', title:'', category:'activity', notes:'' });
-            const [draggingId, setDraggingId]   = useState(null);
+            const [days,         setDays]         = useState(itinerary.days || []);
+            const [packingItems, setPackingItems] = useState(itinerary.packing_list || []);
+            const [budget,       setBudget]       = useState(itinerary.budget || { total:'', currency:'USD' });
+            const [expenses,     setExpenses]     = useState(itinerary.expenses || []);
+            const [builderTab,   setBuilderTab]   = useState('schedule');
+            const [addingFor,    setAddingFor]    = useState(null);
+            const [form,         setForm]         = useState({ time:'', title:'', category:'activity', notes:'' });
+            const [editingId,    setEditingId]    = useState(null);
+            const [editForm,     setEditForm]     = useState({ time:'', title:'', category:'activity', notes:'' });
+            const [draggingId,   setDraggingId]   = useState(null);
             const [dragOverDate, setDragOverDate] = useState(null);
-            const [suggestions, setSuggestions] = useState([]);
-            const [suggestLoading, setSuggestLoading] = useState(false);
-            const [suggestErr, setSuggestErr]     = useState('');
+            const [suggestions,  setSuggestions]  = useState([]);
+            const [suggestLoad,  setSuggestLoad]  = useState(false);
+            const [suggestErr,   setSuggestErr]   = useState('');
             const [showEssentials, setShowEssentials] = useState(true);
-            const [showSuggest, setShowSuggest]       = useState(false);
-            const [fillingDay, setFillingDay]         = useState(null); // date string
-            const dragRef = useRef(null);
-            const mapRef  = useRef(null);
-            const mapObj  = useRef(null);
+            const [showSuggest,    setShowSuggest]    = useState(false);
+            const [fillingDay,     setFillingDay]     = useState(null);
+            const [showExpForm,    setShowExpForm]    = useState(false);
+            const [expForm,        setExpForm]        = useState({ description:'', amount:'', category:'Food', date: new Date().toISOString().split('T')[0] });
+            const [packInput,      setPackInput]      = useState({ text:'', category:'Clothing' });
+            const [packGenLoad,    setPackGenLoad]    = useState(false);
+            const dragRef    = useRef(null);
+            const mapRef     = useRef(null);
+            const mapObj     = useRef(null);
             const markersRef = useRef([]);
 
             const DAY_COLORS = ['#0EA5E9','#F59E0B','#22C55E','#EC4899','#8B5CF6','#EF4444','#14B8A6','#F97316','#6366F1','#84CC16'];
+            const EXP_CATS   = ['Food','Transport','Accommodation','Activities','Shopping','Health','Other'];
+            const EXP_COLORS = { Food:'#F59E0B', Transport:'#0EA5E9', Accommodation:'#8B5CF6', Activities:'#22C55E', Shopping:'#EC4899', Health:'#EF4444', Other:'#6B7280' };
+            const CURRENCIES = ['USD','EUR','GBP','JPY','AUD','CAD','CHF','CNY','INR','MXN','BRL','SGD','HKD','THB','TRY'];
+            const PACK_CATS  = ['Documents','Clothing','Toiletries','Electronics','Health','Activities','Other'];
+            const PACK_ICONS = { Documents:'📄', Clothing:'👕', Toiletries:'🪥', Electronics:'💻', Health:'💊', Activities:'🎒', Other:'📦' };
+            const TIME_BANDS = [
+                { label:'🌅 Morning',   range:['05:00','11:59'], suggested:'08:00', hint:'Add morning activity' },
+                { label:'☀️ Midday',    range:['12:00','13:59'], suggested:'12:30', hint:'Add lunch' },
+                { label:'🌤️ Afternoon', range:['14:00','17:59'], suggested:'15:00', hint:'Add afternoon activity' },
+                { label:'🌆 Evening',   range:['18:00','23:59'], suggested:'19:00', hint:'Add dinner or evening' },
+            ];
 
-            useEffect(() => { setDays(itinerary.days || []); setSuggestions([]); }, [itinerary.id]);
+            useEffect(() => {
+                setDays(itinerary.days || []);
+                setPackingItems(itinerary.packing_list || []);
+                setBudget(itinerary.budget || { total:'', currency:'USD' });
+                setExpenses(itinerary.expenses || []);
+                setSuggestions([]);
+            }, [itinerary.id]);
 
             // Backfill geocoords for any items missing lat/lng
             useEffect(() => {
@@ -4484,7 +4511,10 @@
                 else if (bounds.length === 1) mapObj.current.setView(bounds[0], 12);
             }, [days]);
 
-            const persist = (newDays) => { setDays(newDays); onUpdateDays(newDays); };
+            const persist       = (nd)    => { setDays(nd);          onUpdateItinerary({ days: nd }); };
+            const persistPack   = (items) => { setPackingItems(items); onUpdateItinerary({ packing_list: items }); };
+            const persistBudget = (b)     => { setBudget(b);           onUpdateItinerary({ budget: b }); };
+            const persistExp    = (exps)  => { setExpenses(exps);      onUpdateItinerary({ expenses: exps }); };
 
             const addItemDirect = async (date, itemData) => {
                 const item = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), ...itemData };
@@ -4501,7 +4531,7 @@
                             const upd = prev.map(d => d.date === date
                                 ? { ...d, items: d.items.map(i => i.id === item.id ? { ...i, lat: coord.lat, lng: coord.lng } : i) }
                                 : d);
-                            onUpdateDays(upd);
+                            onUpdateItinerary({ days: upd });
                             return upd;
                         });
                     });
@@ -4517,6 +4547,22 @@
 
             const removeItem = (date, itemId) => {
                 persist(days.map(d => d.date === date ? { ...d, items: d.items.filter(i => i.id !== itemId) } : d));
+            };
+
+            const startEdit = (item) => {
+                setEditingId(item.id);
+                setEditForm({ time: item.time||'', title: item.title, category: item.category, notes: item.notes||'' });
+                setAddingFor(null);
+            };
+
+            const saveEdit = (date) => {
+                if (!editForm.title.trim()) return;
+                const nd = days.map(d => d.date === date
+                    ? { ...d, items: d.items.map(i => i.id === editingId ? { ...i, ...editForm, title: editForm.title.trim() } : i)
+                                   .sort((a,b) => (a.time||'99:99').localeCompare(b.time||'99:99')) }
+                    : d);
+                persist(nd);
+                setEditingId(null);
             };
 
             // ── Drag and drop ──
@@ -4554,7 +4600,7 @@
 
             // ── AI Suggestions ──
             const getSuggestions = async () => {
-                setSuggestLoading(true); setSuggestErr(''); setSuggestions([]);
+                setSuggestLoad(true); setSuggestErr(''); setSuggestions([]);
                 const desc = `${itinerary.travelers}-person trip to ${itinerary.destination || 'an unknown destination'}, ${days.length} days${itinerary.trip_types?.length ? ', type: '+itinerary.trip_types.join(', ') : ''}`;
                 try {
                     const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
@@ -4574,7 +4620,7 @@
                         setShowSuggest(true);
                     }
                 } catch { setSuggestErr('Could not parse suggestions — try again.'); }
-                setSuggestLoading(false);
+                setSuggestLoad(false);
             };
 
             const addSuggestion = (s) => {
@@ -4618,6 +4664,42 @@
                 setFillingDay(null);
             };
 
+            // ── Packing helpers ──
+            const togglePack  = (id)  => persistPack(packingItems.map(p => p.id === id ? { ...p, checked: !p.checked } : p));
+            const removePack  = (id)  => persistPack(packingItems.filter(p => p.id !== id));
+            const addPackItem = ()    => {
+                if (!packInput.text.trim()) return;
+                persistPack([...packingItems, { id: Date.now().toString(36)+Math.random().toString(36).slice(2), text: packInput.text.trim(), category: packInput.category, checked: false }]);
+                setPackInput(prev => ({ ...prev, text:'' }));
+            };
+            const generatePacking = async () => {
+                setPackGenLoad(true);
+                const desc = `${itinerary.travelers}-person ${(itinerary.trip_types||[]).join('/')||''} trip to ${itinerary.destination||'unknown'}, ${days.length} days`;
+                try {
+                    const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
+                        body: { message: `Generate a packing list for: ${desc}.`, systemPrompt: `You are a travel packing expert. Respond ONLY with valid JSON — a raw array. Each element: { "category": "Documents"|"Clothing"|"Toiletries"|"Electronics"|"Health"|"Activities"|"Other", "text": string }. Include 20-25 essential items.`, history: [] }
+                    });
+                    if (!fnErr && !data?.error) {
+                        let raw = (data.message || '').replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+                        const items = JSON.parse(raw);
+                        if (Array.isArray(items)) {
+                            persistPack([...packingItems, ...items.map(i => ({ id: Date.now().toString(36)+Math.random().toString(36).slice(2), text: i.text, category: i.category||'Other', checked: false }))]);
+                        }
+                    }
+                } catch {}
+                setPackGenLoad(false);
+            };
+
+            // ── Budget/expense helpers ──
+            const addExpense = (e) => {
+                e.preventDefault();
+                if (!expForm.description.trim() || !expForm.amount) return;
+                persistExp([...expenses, { ...expForm, id: Date.now().toString(36), amount: parseFloat(expForm.amount) }]);
+                setExpForm({ description:'', amount:'', category:'Food', date: new Date().toISOString().split('T')[0] });
+                setShowExpForm(false);
+            };
+            const removeExp = (id) => persistExp(expenses.filter(e => e.id !== id));
+
             // ── Trip Essentials ──
             const hasType = (date, ...cats) => days.find(d => d.date === date)?.items.some(i => cats.includes(i.category));
             const quickAdd = (date, cat, title) => { setAddingFor(date); setForm({ time:'', title, category: cat, notes:'' }); };
@@ -4626,6 +4708,7 @@
             const firstDate = days[0]?.date;
             const lastDate  = days[days.length - 1]?.date;
             const nightDays = days.slice(0, days.length > 1 ? -1 : days.length);
+            const curr      = budget.currency || 'USD';
 
             const sectionHeader = (label, open, toggle, extra) => (
                 <div onClick={toggle} style={{display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', userSelect:'none', marginBottom: open ? '0.75rem' : 0}}>
@@ -4637,9 +4720,19 @@
                 </div>
             );
 
+            // ── Build interleaved timeline nodes ──
+            const buildTimeline = (items) => {
+                const timed   = items.filter(i => i.time).map(i => ({ type:'item', key:i.time,      data:i }));
+                const untimed = items.filter(i => !i.time).map(i => ({ type:'item', key:'99:99',   data:i }));
+                const blanks  = TIME_BANDS
+                    .filter(b => !items.some(i => i.time && i.time >= b.range[0] && i.time <= b.range[1]))
+                    .map(b => ({ type:'band', key:b.suggested, data:b }));
+                return [...[...timed, ...blanks].sort((a,b) => a.key.localeCompare(b.key)), ...untimed];
+            };
+
             return (
                 <div>
-                    {/* ── Back + Header ── */}
+                    {/* Back + Header */}
                     <button onClick={onBack} style={backBtnStyle}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                         Back to itineraries
@@ -4656,9 +4749,9 @@
                         <button className="btn" onClick={onDelete} style={{color:'var(--danger)', borderColor:'var(--danger)', fontSize:'0.82rem'}}>Delete Trip</button>
                     </div>
 
-                    {/* ── Map ── */}
+                    {/* Map */}
                     <div className="category-block" style={{marginBottom:'1rem', padding:'0.75rem'}}>
-                        <div ref={mapRef} style={{width:'100%', height:'260px', borderRadius:'10px', overflow:'hidden', border:'1px solid var(--border)'}} />
+                        <div ref={mapRef} style={{width:'100%', height:'220px', borderRadius:'10px', overflow:'hidden', border:'1px solid var(--border)'}} />
                         <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem', marginTop:'0.5rem', alignItems:'center'}}>
                             {days.map((d, i) => (
                                 <span key={d.date} style={{display:'inline-flex', alignItems:'center', gap:'4px', fontSize:'0.72rem', fontWeight:'600', color:'var(--text-muted)'}}>
@@ -4670,148 +4763,360 @@
                         </div>
                     </div>
 
-                    {/* ── Trip Essentials ── */}
-                    <div className="category-block" style={{marginBottom:'1rem'}}>
-                        {sectionHeader('Trip Essentials', showEssentials, () => setShowEssentials(v => !v))}
-                        {showEssentials && (
-                            <div style={{display:'flex', flexDirection:'column', gap:'0.45rem'}}>
-                                {[
-                                    { label:`Arrival transport`, date: firstDate, cats:['flight','transport'], defCat:'flight', defTitle:`Arrive in ${itinerary.destination||'destination'}` },
-                                    { label:`Departure transport`, date: lastDate, cats:['flight','transport'], defCat:'flight', defTitle:`Depart ${itinerary.destination||'destination'}` },
-                                    ...nightDays.map((d, i) => ({ label:`Night ${i+1} lodging`, date: d.date, cats:['lodging'], defCat:'lodging', defTitle:'Hotel / accommodation' }))
-                                ].map(row => {
-                                    const done = hasType(row.date, ...row.cats);
-                                    return (
-                                        <div key={row.label} style={{display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 0.6rem', borderRadius:'8px', background: done ? 'rgba(34,197,94,0.06)' : 'var(--surface)', border:'1px solid var(--border)'}}>
-                                            <span style={{fontSize:'1rem', flexShrink:0}}>{done ? '✅' : '⬜'}</span>
-                                            <div style={{flex:1, fontSize:'0.85rem', fontWeight:'600', color: done ? 'var(--success)' : 'var(--text)'}}>{row.label}</div>
-                                            <div style={{fontSize:'0.75rem', color:'var(--text-muted)', flexShrink:0}}>{fmtDate(row.date)}</div>
-                                            {!done && (
-                                                <button className="btn" style={{fontSize:'0.75rem', padding:'0.25rem 0.65rem', flexShrink:0}}
-                                                    onClick={() => quickAdd(row.date, row.defCat, row.defTitle)}>
-                                                    + Add
-                                                </button>
+                    {/* Sub-tabs */}
+                    <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.25rem', flexWrap:'wrap'}}>
+                        {[['schedule','🗓️ Schedule'], ['packing','🧳 Packing'], ['budget','💰 Budget']].map(([key, label]) => (
+                            <button key={key} onClick={() => setBuilderTab(key)}
+                                style={{padding:'0.45rem 1.1rem', borderRadius:'999px', border: builderTab===key ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: builderTab===key ? 'rgba(14,165,233,0.12)' : 'transparent', color: builderTab===key ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.82rem', cursor:'pointer', transition:'all 0.15s'}}>
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* ── SCHEDULE TAB ── */}
+                    {builderTab === 'schedule' && (
+                        <div>
+                            {/* Trip Essentials */}
+                            <div className="category-block" style={{marginBottom:'1rem'}}>
+                                {sectionHeader('Trip Essentials', showEssentials, () => setShowEssentials(v => !v))}
+                                {showEssentials && (
+                                    <div style={{display:'flex', flexDirection:'column', gap:'0.45rem'}}>
+                                        {[
+                                            { label:`Arrival transport`, date: firstDate, cats:['flight','transport'], defCat:'flight', defTitle:`Arrive in ${itinerary.destination||'destination'}` },
+                                            { label:`Departure transport`, date: lastDate, cats:['flight','transport'], defCat:'flight', defTitle:`Depart ${itinerary.destination||'destination'}` },
+                                            ...nightDays.map((d, i) => ({ label:`Night ${i+1} lodging`, date: d.date, cats:['lodging'], defCat:'lodging', defTitle:'Hotel / accommodation' }))
+                                        ].map(row => {
+                                            const done = hasType(row.date, ...row.cats);
+                                            return (
+                                                <div key={row.label} style={{display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 0.6rem', borderRadius:'8px', background: done ? 'rgba(34,197,94,0.06)' : 'var(--surface)', border:'1px solid var(--border)'}}>
+                                                    <span style={{fontSize:'1rem', flexShrink:0}}>{done ? '✅' : '⬜'}</span>
+                                                    <div style={{flex:1, fontSize:'0.85rem', fontWeight:'600', color: done ? 'var(--success)' : 'var(--text)'}}>{row.label}</div>
+                                                    <div style={{fontSize:'0.75rem', color:'var(--text-muted)', flexShrink:0}}>{fmtDate(row.date)}</div>
+                                                    {!done && <button className="btn" style={{fontSize:'0.75rem', padding:'0.25rem 0.65rem', flexShrink:0}} onClick={() => { quickAdd(row.date, row.defCat, row.defTitle); setBuilderTab('schedule'); }}>+ Add</button>}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* AI Suggestions */}
+                            <div className="category-block" style={{marginBottom:'1rem'}}>
+                                {sectionHeader('AI Suggestions', showSuggest, () => setShowSuggest(v => !v),
+                                    <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.75rem'}}
+                                        onClick={(e) => { e.stopPropagation(); getSuggestions(); setShowSuggest(true); }} disabled={suggestLoad}>
+                                        {suggestLoad ? '✨ Thinking…' : '✨ Get Suggestions'}
+                                    </button>
+                                )}
+                                {showSuggest && (
+                                    <div>
+                                        {suggestErr && <p style={{color:'var(--danger)', fontSize:'0.85rem'}}>{suggestErr}</p>}
+                                        {!suggestLoad && suggestions.length === 0 && !suggestErr && <p style={{color:'var(--text-muted)', fontSize:'0.85rem', fontStyle:'italic'}}>Click "Get Suggestions" to generate AI-powered ideas for your trip.</p>}
+                                        <div style={{display:'flex', flexDirection:'column', gap:'0.45rem'}}>
+                                            {suggestions.map((s, i) => {
+                                                const ci = catInfo(s.category);
+                                                const dayIdx = Math.max(0, Math.min(days.length-1, (s.day||1)-1));
+                                                return (
+                                                    <div key={i} style={{display:'flex', alignItems:'flex-start', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'8px', padding:'0.6rem 0.75rem'}}>
+                                                        <span style={{fontSize:'1.1rem', flexShrink:0}}>{ci.icon}</span>
+                                                        <div style={{flex:1, minWidth:0}}>
+                                                            <div style={{fontWeight:'600', fontSize:'0.88rem'}}>{s.title}</div>
+                                                            {s.notes && <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.15rem'}}>{s.notes}</div>}
+                                                        </div>
+                                                        <div style={{display:'flex', alignItems:'center', gap:'0.4rem', flexShrink:0}}>
+                                                            <span style={{fontSize:'0.72rem', fontWeight:'700', color:DAY_COLORS[dayIdx % DAY_COLORS.length], background:'rgba(0,0,0,0.05)', padding:'2px 7px', borderRadius:'10px'}}>Day {dayIdx+1}</span>
+                                                            <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.65rem'}} onClick={() => addSuggestion(s)}>+ Add</button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Day timeline cards */}
+                            {days.map((day, idx) => {
+                                const color = DAY_COLORS[idx % DAY_COLORS.length];
+                                const nodes = buildTimeline(day.items);
+                                return (
+                                    <div key={day.date} className="category-block" style={{marginBottom:'1rem', borderColor: dragOverDate === day.date ? 'var(--primary)' : 'var(--border)', transition:'border-color 0.15s'}}
+                                        onDragOver={e => { e.preventDefault(); setDragOverDate(day.date); }}
+                                        onDrop={e => handleDrop(e, day.date, null)}>
+
+                                        <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.9rem'}}>
+                                            <span style={{width:10, height:10, borderRadius:'50%', background:color, flexShrink:0}}></span>
+                                            <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', flex:1}}>
+                                                Day {idx + 1} · {fmtDate(day.date)}
+                                            </div>
+                                            <button className="btn" style={{fontSize:'0.72rem', padding:'0.2rem 0.6rem', flexShrink:0}}
+                                                disabled={!!fillingDay} onClick={() => autoFillDay(day.date, idx)}>
+                                                {fillingDay === day.date ? '✨ Filling…' : '✨ Auto-fill'}
+                                            </button>
+                                        </div>
+
+                                        {fillingDay === day.date && <p style={{color:'var(--primary)', fontSize:'0.85rem', fontStyle:'italic', marginBottom:'0.5rem', paddingLeft:'22px'}}>✨ Building your day schedule…</p>}
+
+                                        {/* Vertical timeline */}
+                                        <div style={{position:'relative', paddingLeft:'22px'}}>
+                                            <div style={{position:'absolute', left:'5px', top:'10px', bottom:'10px', width:'2px', background:`linear-gradient(to bottom, ${color}70, ${color}20)`, borderRadius:'1px'}}></div>
+
+                                            {nodes.map((node, ni) => {
+                                                if (node.type === 'item') {
+                                                    const item = node.data;
+                                                    const ci = catInfo(item.category);
+                                                    const isEditing = editingId === item.id;
+                                                    return (
+                                                        <div key={item.id} style={{position:'relative', marginBottom:'0.5rem'}}>
+                                                            <div style={{position:'absolute', left:'-17px', top:'0.65rem', width:'10px', height:'10px', borderRadius:'50%', background:color, border:'2px solid white', boxShadow:`0 0 0 2px ${color}40`, zIndex:1}}></div>
+                                                            {isEditing ? (
+                                                                <div style={{background:'var(--surface)', border:`2px solid ${color}`, borderRadius:'8px', padding:'0.6rem 0.75rem', display:'grid', gap:'0.45rem'}}>
+                                                                    <div style={{display:'grid', gridTemplateColumns:'100px 1fr 130px', gap:'0.4rem'}}>
+                                                                        <input type="time" value={editForm.time} onChange={e => setEditForm({...editForm, time: e.target.value})} />
+                                                                        <input type="text" value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})} placeholder="Activity name" autoFocus />
+                                                                        <select className="country-select" value={editForm.category} onChange={e => setEditForm({...editForm, category: e.target.value})}>
+                                                                            {categories.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
+                                                                        </select>
+                                                                    </div>
+                                                                    <input type="text" value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} placeholder="Notes (optional)" />
+                                                                    <div style={{display:'flex', gap:'0.4rem'}}>
+                                                                        <button className="btn btn-primary" onClick={() => saveEdit(day.date)} style={{flex:1, fontSize:'0.8rem'}}>Save</button>
+                                                                        <button className="btn" onClick={() => setEditingId(null)} style={{flex:1, fontSize:'0.8rem'}}>Cancel</button>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div draggable onDragStart={e => handleDragStart(e, day.date, item.id)} onDragEnd={handleDragEnd}
+                                                                    onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverDate(day.date); }}
+                                                                    onDrop={e => { e.stopPropagation(); handleDrop(e, day.date, item.id); }}
+                                                                    style={{display:'flex', alignItems:'flex-start', gap:'0.6rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'8px', padding:'0.5rem 0.7rem', cursor:'grab', opacity: draggingId === item.id ? 0.4 : 1, transition:'opacity 0.15s'}}>
+                                                                    <span style={{color:'var(--text-muted)', fontSize:'0.8rem', cursor:'grab', flexShrink:0, marginTop:'2px'}}>⠿</span>
+                                                                    <div style={{fontSize:'1rem', flexShrink:0}}>{ci.icon}</div>
+                                                                    <div style={{flex:1, minWidth:0}}>
+                                                                        <div style={{display:'flex', alignItems:'baseline', gap:'0.4rem', flexWrap:'wrap'}}>
+                                                                            {item.time && <span style={{fontWeight:'700', fontSize:'0.8rem', color:color, fontVariantNumeric:'tabular-nums'}}>{item.time}</span>}
+                                                                            <span style={{fontWeight:'600', fontSize:'0.87rem'}}>{item.title}</span>
+                                                                            {item.lat && <span title="On map" style={{fontSize:'0.65rem', color:'var(--text-muted)'}}>📍</span>}
+                                                                        </div>
+                                                                        {item.notes && <div style={{fontSize:'0.77rem', color:'var(--text-muted)', marginTop:'0.1rem'}}>{item.notes}</div>}
+                                                                    </div>
+                                                                    <div style={{display:'flex', gap:'0.1rem', flexShrink:0}}>
+                                                                        <button onClick={() => startEdit(item)} title="Edit" style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'0.82rem', padding:'0.1rem 0.3rem', lineHeight:1}}>✏️</button>
+                                                                        <button onClick={() => removeItem(day.date, item.id)} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.1rem', lineHeight:1, padding:'0 0.2rem'}}>×</button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                } else {
+                                                    const band = node.data;
+                                                    return (
+                                                        <div key={band.label} style={{position:'relative', marginBottom:'0.45rem'}}>
+                                                            <div style={{position:'absolute', left:'-15px', top:'0.55rem', width:'8px', height:'8px', borderRadius:'50%', background:'var(--border)', border:'2px solid white'}}></div>
+                                                            <div onClick={() => { setAddingFor(day.date); setForm({ time:band.suggested, title:'', category:'activity', notes:'' }); }}
+                                                                style={{display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.38rem 0.7rem', borderRadius:'8px', border:'1.5px dashed var(--border)', color:'var(--text-muted)', fontSize:'0.8rem', cursor:'pointer', userSelect:'none', transition:'all 0.15s'}}
+                                                                onMouseEnter={e => { e.currentTarget.style.borderColor=color; e.currentTarget.style.color=color; }}
+                                                                onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.color='var(--text-muted)'; }}>
+                                                                <span>{band.label}</span>
+                                                                <span style={{marginLeft:'auto', fontSize:'0.72rem'}}>+ {band.hint}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
+                                            })}
+
+                                            {/* Add item form / button */}
+                                            {addingFor === day.date ? (
+                                                <div style={{position:'relative', marginTop:'0.25rem'}}>
+                                                    <div style={{position:'absolute', left:'-15px', top:'0.65rem', width:'8px', height:'8px', borderRadius:'50%', background:color, border:'2px solid white'}}></div>
+                                                    <div style={{background:'var(--surface)', border:`2px solid ${color}`, borderRadius:'8px', padding:'0.6rem 0.75rem', display:'grid', gap:'0.45rem'}}>
+                                                        <div style={{display:'grid', gridTemplateColumns:'100px 1fr 130px', gap:'0.4rem'}}>
+                                                            <input type="time" value={form.time} onChange={e => setForm({...form, time: e.target.value})} />
+                                                            <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="e.g. Colosseum tour" autoFocus />
+                                                            <select className="country-select" value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
+                                                                {categories.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <input type="text" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} placeholder="Notes (optional)" />
+                                                        <div style={{display:'flex', gap:'0.4rem'}}>
+                                                            <button type="button" className="btn btn-primary" onClick={() => addItem(day.date)} style={{flex:1, fontSize:'0.8rem'}}>Add</button>
+                                                            <button type="button" className="btn" onClick={() => { setAddingFor(null); setForm({time:'',title:'',category:'activity',notes:''}); }} style={{flex:1, fontSize:'0.8rem'}}>Cancel</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div style={{position:'relative', marginTop:'0.25rem'}}>
+                                                    <div style={{position:'absolute', left:'-14px', top:'0.5rem', width:'6px', height:'6px', borderRadius:'50%', background:'var(--border)'}}></div>
+                                                    <button className="btn" onClick={() => { setAddingFor(day.date); setForm({time:'',title:'',category:'activity',notes:''}); }} style={{fontSize:'0.78rem', padding:'0.25rem 0.65rem'}}>+ Add item</button>
+                                                </div>
                                             )}
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
 
-                    {/* ── AI Suggestions ── */}
-                    <div className="category-block" style={{marginBottom:'1rem'}}>
-                        {sectionHeader(
-                            'AI Suggestions',
-                            showSuggest,
-                            () => setShowSuggest(v => !v),
-                            <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.75rem'}}
-                                onClick={(e) => { e.stopPropagation(); getSuggestions(); setShowSuggest(true); }}
-                                disabled={suggestLoading}>
-                                {suggestLoading ? '✨ Thinking…' : '✨ Get Suggestions'}
-                            </button>
-                        )}
-                        {showSuggest && (
-                            <div>
-                                {suggestErr && <p style={{color:'var(--danger)', fontSize:'0.85rem'}}>{suggestErr}</p>}
-                                {!suggestLoading && suggestions.length === 0 && !suggestErr && (
-                                    <p style={{color:'var(--text-muted)', fontSize:'0.85rem', fontStyle:'italic'}}>Click "Get Suggestions" to generate AI-powered ideas for your trip.</p>
+                    {/* ── PACKING TAB ── */}
+                    {builderTab === 'packing' && (
+                        <div>
+                            <div className="category-block" style={{marginBottom:'1rem'}}>
+                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: packingItems.length > 0 ? '0.6rem' : 0}}>
+                                    <div style={{fontWeight:'700', fontSize:'0.9rem', color:'var(--text)'}}>
+                                        {packingItems.filter(p => p.checked).length}/{packingItems.length} items packed
+                                    </div>
+                                    <button className="btn btn-primary" style={{fontSize:'0.78rem', padding:'0.3rem 0.8rem'}} onClick={generatePacking} disabled={packGenLoad}>
+                                        {packGenLoad ? '✨ Generating…' : '✨ AI Generate'}
+                                    </button>
+                                </div>
+                                {packingItems.length > 0 && (
+                                    <div style={{height:'6px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
+                                        <div style={{height:'100%', width:`${Math.round(packingItems.filter(p=>p.checked).length/packingItems.length*100)}%`, background:'var(--success)', transition:'width 0.4s ease', borderRadius:'999px'}}></div>
+                                    </div>
                                 )}
-                                <div style={{display:'flex', flexDirection:'column', gap:'0.45rem'}}>
-                                    {suggestions.map((s, i) => {
-                                        const ci = catInfo(s.category);
-                                        const dayIdx = Math.max(0, Math.min(days.length-1, (s.day||1)-1));
-                                        return (
-                                            <div key={i} style={{display:'flex', alignItems:'flex-start', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'8px', padding:'0.6rem 0.75rem'}}>
-                                                <span style={{fontSize:'1.1rem', flexShrink:0}}>{ci.icon}</span>
-                                                <div style={{flex:1, minWidth:0}}>
-                                                    <div style={{fontWeight:'600', fontSize:'0.88rem'}}>{s.title}</div>
-                                                    {s.notes && <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.15rem'}}>{s.notes}</div>}
-                                                </div>
-                                                <div style={{display:'flex', alignItems:'center', gap:'0.4rem', flexShrink:0}}>
-                                                    <span style={{fontSize:'0.72rem', fontWeight:'700', color:DAY_COLORS[dayIdx % DAY_COLORS.length], background:'rgba(0,0,0,0.05)', padding:'2px 7px', borderRadius:'10px'}}>Day {dayIdx+1}</span>
-                                                    <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.65rem'}} onClick={() => addSuggestion(s)}>+ Add</button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ── Day cards ── */}
-                    {days.map((day, idx) => (
-                        <div key={day.date} className="category-block" style={{marginBottom:'1rem', borderColor: dragOverDate === day.date ? 'var(--primary)' : 'var(--border)', transition:'border-color 0.15s'}}
-                            onDragOver={e => { e.preventDefault(); setDragOverDate(day.date); }}
-                            onDrop={e => handleDrop(e, day.date, null)}>
-                            <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.75rem'}}>
-                                <span style={{width:10, height:10, borderRadius:'50%', background:DAY_COLORS[idx % DAY_COLORS.length], flexShrink:0}}></span>
-                                <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', flex:1}}>
-                                    Day {idx + 1} · {fmtDate(day.date)}
-                                </div>
-                                <button className="btn" style={{fontSize:'0.72rem', padding:'0.2rem 0.6rem', flexShrink:0}}
-                                    disabled={!!fillingDay}
-                                    onClick={() => autoFillDay(day.date, idx)}>
-                                    {fillingDay === day.date ? '✨ Filling…' : '✨ Auto-fill'}
-                                </button>
                             </div>
 
-                            {day.items.length === 0 && addingFor !== day.date && fillingDay !== day.date && (
-                                <p style={{color:'var(--text-muted)', fontSize:'0.85rem', fontStyle:'italic', marginBottom:0}}>
-                                    Drop items here, click "+ Add item", or use ✨ Auto-fill.
-                                </p>
-                            )}
-                            {fillingDay === day.date && (
-                                <p style={{color:'var(--primary)', fontSize:'0.85rem', fontStyle:'italic', marginBottom:'0.5rem'}}>
-                                    ✨ Building your day schedule…
-                                </p>
+                            <div className="category-block" style={{marginBottom:'1rem', display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap'}}>
+                                <input type="text" value={packInput.text} onChange={e => setPackInput({...packInput, text: e.target.value})}
+                                    onKeyDown={e => e.key === 'Enter' && addPackItem()}
+                                    placeholder="Add item to pack…" style={{flex:1, minWidth:'140px'}} />
+                                <select className="country-select" value={packInput.category} onChange={e => setPackInput({...packInput, category: e.target.value})} style={{width:'130px', flexShrink:0}}>
+                                    {PACK_CATS.map(c => <option key={c} value={c}>{PACK_ICONS[c]} {c}</option>)}
+                                </select>
+                                <button className="btn btn-primary" onClick={addPackItem} style={{flexShrink:0, fontSize:'0.82rem'}}>+ Add</button>
+                            </div>
+
+                            {packingItems.length === 0 && (
+                                <div style={{textAlign:'center', padding:'2rem 1rem', color:'var(--text-muted)'}}>
+                                    <div style={{fontSize:'2rem', marginBottom:'0.5rem'}}>🧳</div>
+                                    <p style={{fontWeight:'500', marginBottom:'0.35rem'}}>No packing list yet.</p>
+                                    <p style={{fontSize:'0.85rem'}}>Click "✨ AI Generate" for suggestions, or add items manually.</p>
+                                </div>
                             )}
 
-                            <div style={{display:'flex', flexDirection:'column', gap:'0.45rem', marginBottom: day.items.length > 0 && addingFor !== day.date ? '0.6rem' : addingFor === day.date && day.items.length > 0 ? '0.6rem' : 0}}>
-                                {day.items.map(item => (
-                                    <div key={item.id}
-                                        draggable
-                                        onDragStart={e => handleDragStart(e, day.date, item.id)}
-                                        onDragEnd={handleDragEnd}
-                                        onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverDate(day.date); }}
-                                        onDrop={e => { e.stopPropagation(); handleDrop(e, day.date, item.id); }}
-                                        style={{display:'flex', alignItems:'flex-start', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'0.65rem 0.9rem', cursor:'grab', opacity: draggingId === item.id ? 0.4 : 1, transition:'opacity 0.15s'}}>
-                                        <span style={{color:'var(--text-muted)', fontSize:'0.85rem', cursor:'grab', flexShrink:0, marginTop:'2px'}}>⠿</span>
-                                        <div style={{fontSize:'1.05rem', flexShrink:0}}>{catInfo(item.category).icon}</div>
-                                        <div style={{flex:1, minWidth:0}}>
-                                            <div style={{display:'flex', alignItems:'baseline', gap:'0.5rem', flexWrap:'wrap'}}>
-                                                {item.time && <span style={{fontWeight:'700', fontSize:'0.8rem', color:'var(--primary)'}}>{item.time}</span>}
-                                                <span style={{fontWeight:'600', fontSize:'0.88rem'}}>{item.title}</span>
-                                                {item.lat && <span title="On map" style={{fontSize:'0.7rem', color:'var(--text-muted)'}}>📍</span>}
+                            {PACK_CATS.map(cat => {
+                                const items = packingItems.filter(p => p.category === cat);
+                                if (!items.length) return null;
+                                return (
+                                    <div key={cat} className="category-block" style={{marginBottom:'0.75rem'}}>
+                                        <div style={{fontWeight:'700', fontSize:'0.82rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>{PACK_ICONS[cat]} {cat}</div>
+                                        {items.map((p, pi) => (
+                                            <div key={p.id} style={{display:'flex', alignItems:'center', gap:'0.65rem', padding:'0.35rem 0', borderBottom: pi < items.length - 1 ? '1px solid var(--border)' : 'none'}}>
+                                                <input type="checkbox" checked={p.checked} onChange={() => togglePack(p.id)} style={{width:'16px', height:'16px', cursor:'pointer', flexShrink:0, accentColor:'var(--primary)'}} />
+                                                <span style={{flex:1, fontSize:'0.88rem', textDecoration: p.checked ? 'line-through' : 'none', color: p.checked ? 'var(--text-muted)' : 'var(--text)'}}>{p.text}</span>
+                                                <button onClick={() => removePack(p.id)} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.1rem', lineHeight:1, padding:'0 0.2rem'}}>×</button>
                                             </div>
-                                            {item.notes && <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'0.15rem'}}>{item.notes}</div>}
+                                        ))}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* ── BUDGET TAB ── */}
+                    {builderTab === 'budget' && (
+                        <div>
+                            <div className="category-block" style={{marginBottom:'1rem'}}>
+                                <div style={{fontWeight:'700', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:'0.75rem'}}>Trip Budget</div>
+                                <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:'0.75rem', alignItems:'end'}}>
+                                    <div className="form-group" style={{margin:0}}>
+                                        <label>Total Budget</label>
+                                        <input type="number" min="0" step="0.01" value={budget.total} onChange={e => persistBudget({...budget, total: e.target.value})} placeholder="e.g. 2000" />
+                                    </div>
+                                    <div className="form-group" style={{margin:0}}>
+                                        <label>Currency</label>
+                                        <select className="country-select" value={curr} onChange={e => persistBudget({...budget, currency: e.target.value})} style={{width:'90px'}}>
+                                            {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                                {(() => {
+                                    const spent = expenses.reduce((s, e) => s + e.amount, 0);
+                                    const budgetAmt = parseFloat(budget.total) || 0;
+                                    if (!budgetAmt) return null;
+                                    const remaining = budgetAmt - spent;
+                                    const pct = Math.min(100, Math.round(spent / budgetAmt * 100));
+                                    return (
+                                        <div style={{marginTop:'1rem'}}>
+                                            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'0.4rem'}}>
+                                                <span style={{fontSize:'0.82rem', color:'var(--text-muted)', fontWeight:'600'}}>{curr} {spent.toFixed(2)} spent</span>
+                                                <span style={{fontSize:'0.82rem', fontWeight:'700', color: remaining >= 0 ? 'var(--success)' : 'var(--danger)'}}>
+                                                    {remaining >= 0 ? `${curr} ${remaining.toFixed(2)} left` : `${curr} ${Math.abs(remaining).toFixed(2)} over budget`}
+                                                </span>
+                                            </div>
+                                            <div style={{height:'8px', background:'#E5E7EB', borderRadius:'999px', overflow:'hidden'}}>
+                                                <div style={{height:'100%', width:`${pct}%`, background: pct < 80 ? 'var(--success)' : pct < 100 ? '#F59E0B' : 'var(--danger)', borderRadius:'999px', transition:'width 0.4s ease'}}></div>
+                                            </div>
                                         </div>
-                                        <button onClick={() => removeItem(day.date, item.id)} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.2rem', lineHeight:1, padding:'0 0.2rem', flexShrink:0}}>×</button>
+                                    );
+                                })()}
+                            </div>
+
+                            {(() => {
+                                const byCat = EXP_CATS.map(cat => ({ cat, amt: expenses.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0) })).filter(c => c.amt > 0);
+                                if (!byCat.length) return null;
+                                return (
+                                    <div className="category-block" style={{marginBottom:'1rem'}}>
+                                        <div style={{fontWeight:'700', fontSize:'0.82rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--text-muted)', marginBottom:'0.6rem'}}>By Category</div>
+                                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem'}}>
+                                            {byCat.map(({cat, amt}) => (
+                                                <span key={cat} style={{display:'inline-flex', alignItems:'center', gap:'0.4rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'999px', padding:'0.3rem 0.75rem', fontSize:'0.82rem', fontWeight:'600'}}>
+                                                    <span style={{width:'8px', height:'8px', borderRadius:'50%', background:EXP_COLORS[cat], flexShrink:0, display:'inline-block'}}></span>
+                                                    {cat}: {curr} {amt.toFixed(2)}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
+                                <span style={{fontWeight:'700', fontSize:'0.9rem'}}>Expenses ({expenses.length})</span>
+                                {!showExpForm && <button className="btn btn-primary" onClick={() => setShowExpForm(true)} style={{fontSize:'0.82rem'}}>+ Log Expense</button>}
+                            </div>
+
+                            {showExpForm && (
+                                <div className="category-block" style={{marginBottom:'1rem'}}>
+                                    <form onSubmit={addExpense}>
+                                        <div style={{display:'grid', gap:'0.55rem'}}>
+                                            <input type="text" value={expForm.description} onChange={e => setExpForm({...expForm, description: e.target.value})} placeholder="e.g. Dinner, taxi, museum ticket" required />
+                                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0.5rem'}}>
+                                                <input type="number" min="0" step="0.01" value={expForm.amount} onChange={e => setExpForm({...expForm, amount: e.target.value})} placeholder={`Amount (${curr})`} required />
+                                                <select className="country-select" value={expForm.category} onChange={e => setExpForm({...expForm, category: e.target.value})}>
+                                                    {EXP_CATS.map(c => <option key={c}>{c}</option>)}
+                                                </select>
+                                                <input type="date" value={expForm.date} onChange={e => setExpForm({...expForm, date: e.target.value})} />
+                                            </div>
+                                            <div style={{display:'flex', gap:'0.5rem'}}>
+                                                <button type="submit" className="btn btn-primary" style={{flex:1, fontSize:'0.82rem'}}>Save</button>
+                                                <button type="button" className="btn" onClick={() => setShowExpForm(false)} style={{flex:1, fontSize:'0.82rem'}}>Cancel</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
+
+                            {expenses.length === 0 && !showExpForm && (
+                                <div style={{textAlign:'center', padding:'2rem 1rem', color:'var(--text-muted)'}}>
+                                    <div style={{fontSize:'2rem', marginBottom:'0.5rem'}}>💸</div>
+                                    <p style={{fontWeight:'500'}}>No expenses logged yet.</p>
+                                </div>
+                            )}
+
+                            <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+                                {expenses.map(exp => (
+                                    <div key={exp.id} style={{display:'flex', alignItems:'center', gap:'0.75rem', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'8px', padding:'0.75rem 0.9rem'}}>
+                                        <div style={{width:'10px', height:'10px', borderRadius:'50%', background:EXP_COLORS[exp.category]||'#6B7280', flexShrink:0}}></div>
+                                        <div style={{flex:1, minWidth:0}}>
+                                            <div style={{fontWeight:'600', fontSize:'0.88rem'}}>{exp.description}</div>
+                                            <div style={{fontSize:'0.75rem', color:'var(--text-muted)', marginTop:'0.1rem'}}>{exp.category} · {exp.date}</div>
+                                        </div>
+                                        <div style={{fontWeight:'700', fontSize:'0.9rem', flexShrink:0}}>{curr} {exp.amount.toFixed(2)}</div>
+                                        <button onClick={() => removeExp(exp.id)} style={{background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.2rem', lineHeight:1, padding:'0 0.25rem'}}>×</button>
                                     </div>
                                 ))}
                             </div>
-
-                            {addingFor === day.date ? (
-                                <div style={{display:'grid', gap:'0.5rem'}}>
-                                    <div style={{display:'grid', gridTemplateColumns:'110px 1fr 140px', gap:'0.5rem'}}>
-                                        <input type="time" value={form.time} onChange={e => setForm({...form, time: e.target.value})} />
-                                        <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="e.g. Colosseum tour" autoFocus />
-                                        <select className="country-select" value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
-                                            {categories.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
-                                        </select>
-                                    </div>
-                                    <input type="text" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} placeholder="Notes (optional)" />
-                                    <div style={{display:'flex', gap:'0.5rem'}}>
-                                        <button type="button" className="btn btn-primary" onClick={() => addItem(day.date)} style={{flex:1}}>Add</button>
-                                        <button type="button" className="btn" onClick={() => { setAddingFor(null); setForm({ time:'', title:'', category:'activity', notes:'' }); }} style={{flex:1}}>Cancel</button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <button className="btn" onClick={() => { setAddingFor(day.date); setForm({ time:'', title:'', category:'activity', notes:'' }); }} style={{fontSize:'0.82rem'}}>+ Add item</button>
-                            )}
                         </div>
-                    ))}
+                    )}
                 </div>
             );
         }
