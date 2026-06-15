@@ -4370,7 +4370,8 @@ ${buildTripContext(active)}`;
                             backBtnStyle={backBtnStyle}
                         />
 
-                        {/* ── Stella floating chat widget ── */}
+                        {/* ── Stella floating chat widget — rendered via portal to escape ancestor transforms ── */}
+                        {ReactDOM.createPortal(
                         <div style={{position:'fixed', bottom:'24px', right:'24px', zIndex:9999, display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'10px', pointerEvents:'none'}}>
                             {chatOpen && (
                                 <div style={{width:'340px', height:'460px', backgroundColor:'#ffffff', border:'1.5px solid #e2e8f0', borderRadius:'16px', boxShadow:'0 8px 32px rgba(0,0,0,0.18)', display:'flex', flexDirection:'column', overflow:'hidden', pointerEvents:'all'}}>
@@ -4425,6 +4426,7 @@ ${buildTripContext(active)}`;
                                 title="Chat with Stella"
                             >✨</button>
                         </div>
+                        , document.body)}
                     </div>
                 );
             }
