@@ -1329,9 +1329,7 @@
             const [newPassword, setNewPassword] = useState('');
             const [resetMsg, setResetMsg] = useState('');
             const [resetLoading, setResetLoading] = useState(false);
-            const [showLanding, setShowLanding] = useState(() => {
-                try { return !localStorage.getItem('stompr_active_tab'); } catch { return true; }
-            });
+            const [showLanding, setShowLanding] = useState(true);
             const [activeTab, setActiveTab] = useState(() => {
                 try { return localStorage.getItem('stompr_active_tab') || 'ai'; } catch { return 'ai'; }
             });
