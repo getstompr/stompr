@@ -1165,7 +1165,7 @@
                         <h1 style={S.h1}>Privacy Policy</h1>
                         <p style={S.updated}>Last updated: June 7, 2026</p>
                         <h2 style={S.h2}>Who we are</h2>
-                        <p style={S.p}>Stompr ("we", "us", "our") is a travel planning platform operated by A&amp;E. We help travelers discover destinations, plan itineraries, and track their adventures. Our registered contact email is <a href="mailto:hello@stompr.io" style={{color:'var(--primary)'}}>hello@stompr.io</a>.</p>
+                        <p style={S.p}>Stompr ("we", "us", "our") is a travel planning platform operated by AE Labs LLC. We help travelers discover destinations, plan itineraries, and track their adventures. Our registered contact email is <a href="mailto:hello@stompr.io" style={{color:'var(--primary)'}}>hello@stompr.io</a>.</p>
                         <h2 style={S.h2}>What we collect</h2>
                         <p style={S.p}>When you create an account we collect:</p>
                         <ul style={S.ul}>
@@ -1242,26 +1242,19 @@
                     <>
                         <h1 style={S.h1}>Contact Us</h1>
                         <p style={{...S.p, marginBottom:'2rem'}}>We'd love to hear from you — whether it's a question, a bug report, or a partnership inquiry.</p>
-                        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'1.25rem', marginBottom:'2.5rem'}}>
-                            {[
-                                { icon:'✉️', title:'General', desc:'hello@stompr.io', href:'mailto:hello@stompr.io' },
-                                { icon:'🔒', title:'Privacy & Data', desc:'privacy@stompr.io', href:'mailto:privacy@stompr.io' },
-                                { icon:'🏢', title:'Business & Partnerships', desc:'business@stompr.io', href:'mailto:business@stompr.io' },
-                                { icon:'🐞', title:'Report a Bug', desc:'hello@stompr.io', href:'mailto:hello@stompr.io?subject=Bug report' },
-                            ].map(c => (
-                                <a key={c.title} href={c.href} style={{display:'block', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:'1.5rem', textDecoration:'none', transition:'box-shadow 0.2s'}}
-                                   onMouseOver={e => e.currentTarget.style.boxShadow='var(--shadow-md)'}
-                                   onMouseOut={e => e.currentTarget.style.boxShadow='none'}>
-                                    <div style={{fontSize:'1.75rem', marginBottom:'0.5rem'}}>{c.icon}</div>
-                                    <div style={{fontWeight:700, fontSize:'0.95rem', color:'var(--text)', marginBottom:'0.25rem'}}>{c.title}</div>
-                                    <div style={{fontSize:'0.85rem', color:'var(--primary)'}}>{c.desc}</div>
-                                </a>
-                            ))}
-                        </div>
-                        <div style={{background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:'1.75rem'}}>
+                        <a href="mailto:hello@stompr.io" style={{display:'block', maxWidth:280, background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:'1.5rem', textDecoration:'none', transition:'box-shadow 0.2s', marginBottom:'2.5rem'}}
+                           onMouseOver={e => e.currentTarget.style.boxShadow='var(--shadow-md)'}
+                           onMouseOut={e => e.currentTarget.style.boxShadow='none'}>
+                            <div style={{fontSize:'1.75rem', marginBottom:'0.5rem'}}>✉️</div>
+                            <div style={{fontWeight:700, fontSize:'0.95rem', color:'var(--text)', marginBottom:'0.25rem'}}>Email Us</div>
+                            <div style={{fontSize:'0.85rem', color:'var(--primary)'}}>hello@stompr.io</div>
+                        </a>
+                        <div style={{background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:'1.75rem', marginBottom:'2.5rem'}}>
                             <div style={{fontWeight:700, fontSize:'1rem', color:'var(--text)', marginBottom:'0.4rem'}}>Response time</div>
                             <p style={{...S.p, marginBottom:0}}>We typically respond within 1–2 business days. For urgent account issues, email us directly and include your username in the subject line.</p>
                         </div>
+                        <h2 style={S.h2}>About Stompr</h2>
+                        <p style={{...S.p, marginBottom:0}}>Stompr is built by AE Labs LLC, a small team on a mission to make travel planning effortless — from AI-powered itineraries to smart packing lists and an interactive travel map. <a href="#about" style={{color:'var(--primary)'}}>Learn more about us</a>.</p>
                     </>
                 ),
                 about: (
@@ -1303,7 +1296,7 @@
                         </a>
                     </div>
                     <div style={S.body}>{pages[page]}</div>
-                    <div style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'1.5rem 0 2rem'}}>© {new Date().getFullYear()} Stompr. With love from A&amp;E</div>
+                    <div style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'1.5rem 0 2rem'}}>© {new Date().getFullYear()} <a href="https://aelabs.llc" target="_blank" rel="noopener" style={{color:'#bbb',textDecoration:'underline'}}>AE Labs LLC</a>. All rights reserved.</div>
                 </div>
             );
         }
@@ -1734,7 +1727,7 @@
                                        onMouseOver={e=>e.target.style.color='var(--primary)'} onMouseOut={e=>e.target.style.color='var(--text-muted)'}>{label}</a>
                                 ))}
                             </div>
-                            <div style={{fontSize:'0.72rem',color:'#bbb'}}>© {new Date().getFullYear()} Stompr · With love from A&amp;E</div>
+                            <div style={{fontSize:'0.72rem',color:'#bbb'}}>© {new Date().getFullYear()} <a href="https://aelabs.llc" target="_blank" rel="noopener" style={{color:'#bbb',textDecoration:'underline'}}>AE Labs LLC</a>. All rights reserved.</div>
                         </footer>
                     </div>
                 );
@@ -1978,7 +1971,7 @@
                                 )}
 
                             </div>
-                            <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 0.5rem'}}>With love from A&amp;E</footer>
+                            <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 0.5rem'}}>© {new Date().getFullYear()} <a href="https://aelabs.llc" target="_blank" rel="noopener" style={{color:'#bbb',textDecoration:'underline'}}>AE Labs LLC</a></footer>
                         </div>
                     </div>
                 );
@@ -2016,7 +2009,7 @@
                                     <button type="submit" className="btn btn-primary" style={{width:'100%', marginTop:'1rem'}}>Continue →</button>
                                 </form>
                             </div>
-                            <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 0.5rem'}}>With love from A&amp;E</footer>
+                            <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 0.5rem'}}>© {new Date().getFullYear()} <a href="https://aelabs.llc" target="_blank" rel="noopener" style={{color:'#bbb',textDecoration:'underline'}}>AE Labs LLC</a></footer>
                         </div>
                     </div>
                 );
@@ -2121,7 +2114,7 @@
                             )}
                             </div>
                         </div>
-                        <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 0.5rem'}}>With love from A&amp;E</footer>
+                        <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 0.5rem'}}>© {new Date().getFullYear()} <a href="https://aelabs.llc" target="_blank" rel="noopener" style={{color:'#bbb',textDecoration:'underline'}}>AE Labs LLC</a></footer>
                     </div>
                 </div>
             );
