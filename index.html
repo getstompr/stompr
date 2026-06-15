@@ -1023,8 +1023,12 @@
                 if (_photoCache[destination]) { setUrl(_photoCache[destination]); return; }
                 fetch(`https://pixabay.com/api/?key=${PIXABAY_KEY}&q=${encodeURIComponent(destination + ' travel')}&image_type=photo&per_page=3&safesearch=true&orientation=horizontal`)
                     .then(r => r.json())
-                    .then(d => { const u = d.hits?.[0]?.webformatURL; if (u) { _photoCache[destination] = u; setUrl(u); } })
-                    .catch(() => {});
+                    .then(d => {
+                        console.log('[Pixabay]', destination, d);
+                        const u = d.hits?.[0]?.webformatURL;
+                        if (u) { _photoCache[destination] = u; setUrl(u); }
+                    })
+                    .catch(err => console.error('[Pixabay error]', destination, err));
             }, [destination]);
             return (
                 <div style={{position:'relative', height, backgroundImage: url ? `url(${url})` : 'none', backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'var(--surface)', borderRadius, overflow:'hidden', flexShrink:0}}>
