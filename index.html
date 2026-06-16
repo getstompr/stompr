@@ -1553,8 +1553,8 @@
                 await supabaseClient.auth.signOut();
             };
 
-            const addPlace = async (placeName, visited, lat, lng) => {
-                const row = { name: placeName, visited, user_id: session.user.id };
+            const addPlace = async (placeName, visited, lat, lng, category = 'destination', location = '') => {
+                const row = { name: placeName, visited, user_id: session.user.id, category: category || 'destination', location: location || '' };
                 if (lat != null && lng != null) { row.lat = lat; row.lng = lng; }
                 const { data } = await supabaseClient
                     .from('places')
@@ -2138,7 +2138,7 @@
                         <div className="tabs">
                             <button className={`tab ${activeTab === 'ai' ? 'active' : ''}`} onClick={() => setActiveTab('ai')}>AI Travel Assistant</button>
                             <button className={`tab ${activeTab === 'itinerary' ? 'active' : ''}`} onClick={() => setActiveTab('itinerary')}>Itinerary</button>
-                            <button className={`tab ${activeTab === 'places' ? 'active' : ''}`} onClick={() => setActiveTab('places')}>Bucket List & Visited</button>
+                            <button className={`tab ${activeTab === 'places' ? 'active' : ''}`} onClick={() => setActiveTab('places')}>My World</button>
                             <button className={`tab ${activeTab === 'community' ? 'active' : ''}`} onClick={() => setActiveTab('community')}>Community</button>
                         </div>
                     </header>
@@ -3848,19 +3848,80 @@
 
         function PlacesView({ places, onAddPlace, onToggleStatus, onDeletePlace }) {
             const { useState, useEffect, useRef } = React;
-            const [placeName, setPlaceName] = useState('');
-            const [isVisited, setIsVisited] = useState(false);
-            const [suggestions, setSuggestions] = useState([]);
-            const [selectedCoords, setSelectedCoords] = useState(null);
+
+            const PLACE_CATS = [
+                { key:'destination', label:'Place',       icon:'🌍' },
+                { key:'restaurant',  label:'Restaurant',  icon:'🍽️' },
+                { key:'experience',  label:'Experience',  icon:'🎭' },
+                { key:'adventure',   label:'Adventure',   icon:'🥾' },
+                { key:'cultural',    label:'Cultural',    icon:'🏛️' },
+                { key:'beach',       label:'Beach',       icon:'🏖️' },
+            ];
+
+            const INSPIRE_DATA = {
+                destination: [
+                    { name:'Kyoto', loc:'Japan' }, { name:'Patagonia', loc:'Chile & Argentina' },
+                    { name:'Santorini', loc:'Greece' }, { name:'Amalfi Coast', loc:'Italy' },
+                    { name:'Marrakech', loc:'Morocco' }, { name:'Bali', loc:'Indonesia' },
+                    { name:'Iceland', loc:'' }, { name:'Petra', loc:'Jordan' },
+                    { name:'Queenstown', loc:'New Zealand' }, { name:'Maldives', loc:'' },
+                    { name:'Havana', loc:'Cuba' }, { name:'Cappadocia', loc:'Turkey' },
+                ],
+                restaurant: [
+                    { name:'Ramen at Ichiran', loc:'Tokyo, Japan' }, { name:'Omakase dinner', loc:'Osaka, Japan' },
+                    { name:'Street food tour', loc:'Bangkok, Thailand' }, { name:'Paella at La Pepica', loc:'Valencia, Spain' },
+                    { name:'Truffle dinner', loc:'Périgord, France' }, { name:'Asado feast', loc:'Buenos Aires, Argentina' },
+                    { name:'Dim sum breakfast', loc:'Hong Kong' }, { name:'Floating market meal', loc:'Bangkok, Thailand' },
+                    { name:'Traditional tagine dinner', loc:'Marrakech, Morocco' }, { name:'Michelin-star meal', loc:'Paris, France' },
+                ],
+                experience: [
+                    { name:'Carnival', loc:'Rio de Janeiro, Brazil' }, { name:'Northern Lights', loc:'Tromsø, Norway' },
+                    { name:'La Tomatina festival', loc:'Buñol, Spain' }, { name:'Holi festival', loc:'Jaipur, India' },
+                    { name:'NYE fireworks', loc:'Sydney, Australia' }, { name:'Hot air balloon at sunrise', loc:'Cappadocia, Turkey' },
+                    { name:'Cherry blossom season', loc:'Kyoto, Japan' }, { name:'Midnight sun walk', loc:'Northern Norway' },
+                    { name:'Diwali celebrations', loc:'Jaipur, India' }, { name:'Venetian Carnival', loc:'Venice, Italy' },
+                ],
+                adventure: [
+                    { name:'Trek to Machu Picchu', loc:'Peru' }, { name:'Summit Kilimanjaro', loc:'Tanzania' },
+                    { name:'Hike the Camino de Santiago', loc:'Spain' }, { name:'Dive the Great Barrier Reef', loc:'Australia' },
+                    { name:'Safari in the Serengeti', loc:'Tanzania' }, { name:'Kayak Norwegian Fjords', loc:'Norway' },
+                    { name:'Skydive over the Palm', loc:'Dubai, UAE' }, { name:'Swim with whale sharks', loc:'Mexico' },
+                    { name:'Raft the Zambezi River', loc:'Zambia/Zimbabwe' }, { name:'Dog sled in Lapland', loc:'Finland' },
+                ],
+                cultural: [
+                    { name:'Louvre Museum', loc:'Paris, France' }, { name:'Angkor Wat', loc:'Cambodia' },
+                    { name:'Taj Mahal', loc:'Agra, India' }, { name:'Colosseum', loc:'Rome, Italy' },
+                    { name:'Great Wall of China', loc:'China' }, { name:'Pyramids of Giza', loc:'Egypt' },
+                    { name:'Uffizi Gallery', loc:'Florence, Italy' }, { name:'British Museum', loc:'London, UK' },
+                    { name:'Acropolis & Parthenon', loc:'Athens, Greece' }, { name:'Forbidden City', loc:'Beijing, China' },
+                ],
+                beach: [
+                    { name:'Whitehaven Beach', loc:'Queensland, Australia' }, { name:'Navagio Beach', loc:'Zakynthos, Greece' },
+                    { name:'Pink Beach', loc:'Komodo Island, Indonesia' }, { name:'Bora Bora', loc:'French Polynesia' },
+                    { name:'Hidden Beach', loc:'Marietas Islands, Mexico' }, { name:'Grace Bay', loc:'Turks & Caicos' },
+                    { name:'Anse Lazio', loc:'Praslin, Seychelles' }, { name:'Maya Bay', loc:'Koh Phi Phi, Thailand' },
+                    { name:'Seven Mile Beach', loc:'Grand Cayman' }, { name:'Maldives overwater bungalow', loc:'Maldives' },
+                ],
+            };
+
+            const [addCat,        setAddCat]        = useState('destination');
+            const [placeName,     setPlaceName]      = useState('');
+            const [placeLocation, setPlaceLocation]  = useState('');
+            const [isVisited,     setIsVisited]      = useState(false);
+            const [filterCat,     setFilterCat]      = useState('all');
+            const [suggestions,   setSuggestions]    = useState([]);
+            const [showInspire,   setShowInspire]    = useState(false);
+            const [inspireCat,    setInspireCat]     = useState('destination');
             const debounceRef = useRef(null);
-            const mapRef     = useRef(null);
-            const mapObj     = useRef(null);
-            const markersRef = useRef([]);
+            const mapRef      = useRef(null);
+            const mapObj      = useRef(null);
+            const markersRef  = useRef([]);
 
-            const visitedPlaces = places.filter(p => p.visited);
+            const catOf         = (p) => p.category || 'destination';
             const bucketList    = places.filter(p => !p.visited);
+            const visitedPlaces = places.filter(p =>  p.visited);
+            const filtered      = (arr) => filterCat === 'all' ? arr : arr.filter(p => catOf(p) === filterCat);
 
-            // ── Coords cache ──
             const COORDS_KEY = 'stompr_place_coords';
             const getCache   = () => { try { return JSON.parse(localStorage.getItem(COORDS_KEY)) || {}; } catch { return {}; } };
             const cacheCoord = (name, lat, lng) => {
@@ -3868,38 +3929,41 @@
                 localStorage.setItem(COORDS_KEY, JSON.stringify(c));
             };
 
-            // ── Nominatim autocomplete ──
             const onInputChange = (val) => {
                 setPlaceName(val);
-                setSelectedCoords(null);
+                if (addCat !== 'destination') return;
                 clearTimeout(debounceRef.current);
                 if (val.length < 2) { setSuggestions([]); return; }
                 debounceRef.current = setTimeout(async () => {
                     try {
-                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=5&addressdetails=0`, {
-                            headers: { 'Accept': 'application/json' }
-                        });
-                        if (!res.ok) { console.warn('Nominatim error:', res.status); setSuggestions([]); return; }
+                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=5&addressdetails=0`, { headers: { 'Accept': 'application/json' } });
+                        if (!res.ok) { setSuggestions([]); return; }
                         const data = await res.json();
-                        console.log('Nominatim results for "' + val + '":', data.length);
                         setSuggestions(Array.isArray(data) ? data : []);
-                    } catch (err) { console.error('Nominatim fetch error:', err); setSuggestions([]); }
+                    } catch { setSuggestions([]); }
                 }, 500);
             };
 
             const pickSuggestion = (s) => {
                 const label = s.display_name.split(',').slice(0, 2).join(',').trim();
-                const lat = parseFloat(s.lat);
-                const lng = parseFloat(s.lon);
+                const lat = parseFloat(s.lat), lng = parseFloat(s.lon);
                 cacheCoord(label, lat, lng);
-                onAddPlace(label, isVisited, lat, lng);
-                setPlaceName('');
-                setSelectedCoords(null);
-                setSuggestions([]);
+                onAddPlace(label, isVisited, lat, lng, 'destination', '');
+                setPlaceName(''); setSuggestions([]);
                 if (mapObj.current) mapObj.current.setView([lat, lng], 6, { animate: true });
             };
 
-            // ── Leaflet map init ──
+            const handleAdd = () => {
+                if (!placeName.trim()) return;
+                onAddPlace(placeName.trim(), isVisited, null, null, addCat, placeLocation.trim());
+                setPlaceName(''); setPlaceLocation('');
+            };
+
+            const addInspireItem = (item, cat) => {
+                if (places.some(p => p.name.toLowerCase() === item.name.toLowerCase())) return;
+                onAddPlace(item.name, false, null, null, cat, item.loc || '');
+            };
+
             useEffect(() => {
                 if (!mapRef.current || mapObj.current) return;
                 const map = L.map(mapRef.current, { zoomControl: true }).setView([20, 0], 2);
@@ -3910,175 +3974,227 @@
                 return () => { map.remove(); mapObj.current = null; };
             }, []);
 
-            // ── Update markers when places change ──
             useEffect(() => {
                 if (!mapObj.current) return;
                 markersRef.current.forEach(m => m.remove());
                 markersRef.current = [];
-                if (!places || places.length === 0) return;
+                const destPlaces = places.filter(p => catOf(p) === 'destination');
+                if (!destPlaces.length) return;
                 let cancelled = false;
-                resolveAllCoords(places).then(coordsMap => {
+                resolveAllCoords(destPlaces).then(coordsMap => {
                     if (cancelled || !mapObj.current) return;
-                    markersRef.current = addMarkersToMap(mapObj.current, places, coordsMap);
+                    markersRef.current = addMarkersToMap(mapObj.current, destPlaces, coordsMap);
                 });
                 return () => { cancelled = true; };
             }, [places]);
 
+            const filteredBucket  = filtered(bucketList);
+            const filteredVisited = filtered(visitedPlaces);
+            const activeCatInfo   = PLACE_CATS.find(c => c.key === addCat) || PLACE_CATS[0];
+
+            const filterPill = (key, label) => {
+                const active = filterCat === key;
+                return (
+                    <button key={key} onClick={() => setFilterCat(key)}
+                        style={{padding:'0.28rem 0.75rem', borderRadius:'999px', border: active ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: active ? 'rgba(14,165,233,0.1)' : 'transparent', color: active ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.78rem', cursor:'pointer', transition:'all 0.15s'}}>
+                        {label}
+                    </button>
+                );
+            };
+
             return (
                 <div>
-                    {/* ── Search bar ── */}
-                    <div style={{marginBottom:'0.4rem', position:'relative', zIndex:1000}}>
-                        <div style={{display:'flex', gap:'0.6rem', alignItems:'center'}}>
-                            <div style={{flex:1, position:'relative'}}>
-                                <input
-                                    type="text"
-                                    value={placeName}
-                                    onChange={e => onInputChange(e.target.value)}
-                                    onBlur={() => setTimeout(() => setSuggestions([]), 250)}
-                                    placeholder="Search for a place…"
-                                    autoComplete="off"
-                                    style={{width:'100%', padding:'0.7rem 1rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.9rem', background:'var(--card-bg)', color:'var(--text)', outline:'none', boxSizing:'border-box'}}
-                                />
-                                {suggestions.length > 0 && (
-                                    <div style={{position:'absolute', top:'calc(100% + 6px)', left:0, right:0, background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'12px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:9999, overflow:'hidden'}}>
-                                        {suggestions.map((s, i) => (
-                                            <div key={i} onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }} style={{padding:'0.65rem 1rem', cursor:'pointer', fontSize:'0.85rem', color:'var(--text)', borderBottom: i < suggestions.length - 1 ? '1px solid var(--border)' : 'none', display:'flex', alignItems:'center', gap:'0.6rem'}}
-                                                onMouseEnter={e => e.currentTarget.style.background='var(--bg)'}
-                                                onMouseLeave={e => e.currentTarget.style.background='transparent'}
-                                            >
-                                                <span style={{fontSize:'1rem', flexShrink:0}}>📍</span>
-                                                <span style={{flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{s.display_name}</span>
-                                                <span style={{fontSize:'0.7rem', fontWeight:'600', color: isVisited ? '#22C55E' : '#EF4444', flexShrink:0, background: isVisited ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', padding:'2px 8px', borderRadius:'10px'}}>{isVisited ? '+ Visited' : '+ Bucket List'}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                    {/* ── Category selector ── */}
+                    <div style={{display:'flex', gap:'0.4rem', flexWrap:'wrap', marginBottom:'0.85rem'}}>
+                        {PLACE_CATS.map(c => {
+                            const sel = addCat === c.key;
+                            return (
+                                <button key={c.key} onClick={() => { setAddCat(c.key); setSuggestions([]); setPlaceName(''); }}
+                                    style={{padding:'0.35rem 0.85rem', borderRadius:'999px', border: sel ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: sel ? 'rgba(14,165,233,0.12)' : 'transparent', color: sel ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.82rem', cursor:'pointer', transition:'all 0.15s'}}>
+                                    {c.icon} {c.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* ── Input ── */}
+                    {addCat === 'destination' ? (
+                        <div style={{marginBottom:'0.4rem', position:'relative', zIndex:1000}}>
+                            <div style={{display:'flex', gap:'0.6rem', alignItems:'center'}}>
+                                <div style={{flex:1, position:'relative'}}>
+                                    <input type="text" value={placeName} onChange={e => onInputChange(e.target.value)}
+                                        onBlur={() => setTimeout(() => setSuggestions([]), 250)}
+                                        placeholder="🌍 Search for a destination…" autoComplete="off"
+                                        style={{width:'100%', padding:'0.7rem 1rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.9rem', background:'var(--card-bg)', color:'var(--text)', outline:'none', boxSizing:'border-box'}} />
+                                    {suggestions.length > 0 && (
+                                        <div style={{position:'absolute', top:'calc(100% + 6px)', left:0, right:0, background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'12px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:9999, overflow:'hidden'}}>
+                                            {suggestions.map((s, i) => (
+                                                <div key={i} onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }}
+                                                    style={{padding:'0.65rem 1rem', cursor:'pointer', fontSize:'0.85rem', color:'var(--text)', borderBottom: i < suggestions.length-1 ? '1px solid var(--border)' : 'none', display:'flex', alignItems:'center', gap:'0.6rem'}}
+                                                    onMouseEnter={e => e.currentTarget.style.background='var(--bg)'}
+                                                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                    <span style={{fontSize:'1rem', flexShrink:0}}>📍</span>
+                                                    <span style={{flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{s.display_name}</span>
+                                                    <span style={{fontSize:'0.7rem', fontWeight:'600', color: isVisited ? '#22C55E' : '#EF4444', flexShrink:0, background: isVisited ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', padding:'2px 8px', borderRadius:'10px'}}>{isVisited ? '+ Visited' : '+ List'}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <select value={isVisited ? 'visited' : 'bucket'} onChange={e => setIsVisited(e.target.value === 'visited')}
+                                    style={{padding:'0.7rem 0.75rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.84rem', background:'var(--card-bg)', color:'var(--text)', cursor:'pointer', flexShrink:0}}>
+                                    <option value="bucket">Bucket List</option>
+                                    <option value="visited">Visited</option>
+                                </select>
                             </div>
-                            <select value={isVisited ? 'visited' : 'bucket'} onChange={e => setIsVisited(e.target.value === 'visited')} style={{padding:'0.7rem 0.75rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.84rem', background:'var(--card-bg)', color:'var(--text)', cursor:'pointer', flexShrink:0}}>
+                        </div>
+                    ) : (
+                        <div style={{display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap', marginBottom:'0.85rem'}}>
+                            <input type="text" value={placeName} onChange={e => setPlaceName(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                                placeholder={`${activeCatInfo.icon} Add a ${activeCatInfo.label.toLowerCase()}…`}
+                                style={{flex:1, minWidth:'160px', padding:'0.7rem 1rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.9rem', background:'var(--card-bg)', color:'var(--text)', outline:'none'}} />
+                            <input type="text" value={placeLocation} onChange={e => setPlaceLocation(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                                placeholder="Location (e.g. Paris, France)"
+                                style={{width:'180px', padding:'0.7rem 1rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.84rem', background:'var(--card-bg)', color:'var(--text)', outline:'none', flexShrink:0}} />
+                            <select value={isVisited ? 'visited' : 'bucket'} onChange={e => setIsVisited(e.target.value === 'visited')}
+                                style={{padding:'0.7rem 0.75rem', borderRadius:'24px', border:'1.5px solid var(--border)', fontFamily:'Inter, sans-serif', fontSize:'0.84rem', background:'var(--card-bg)', color:'var(--text)', cursor:'pointer', flexShrink:0}}>
                                 <option value="bucket">Bucket List</option>
                                 <option value="visited">Visited</option>
                             </select>
+                            <button className="btn btn-primary" onClick={handleAdd} style={{flexShrink:0, borderRadius:'24px', padding:'0.7rem 1.2rem', fontWeight:'700'}}>+ Add</button>
                         </div>
-                    </div>
+                    )}
 
-                    {/* ── Map ── */}
-                    <div style={{marginBottom:'2rem'}}>
-                        <div ref={mapRef} style={{width:'100%', height:'300px', borderRadius:'14px', overflow:'hidden', border:'1px solid var(--border)', marginTop:'1rem'}} />
-                        <p style={{fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'0.4rem'}}>
-                            🔴 Bucket list &nbsp;·&nbsp; 🟢 Visited &nbsp;·&nbsp; © OpenStreetMap contributors
-                        </p>
-                    </div>
+                    {/* ── Map (destinations only) ── */}
+                    {places.some(p => catOf(p) === 'destination') && (
+                        <div style={{marginBottom:'2rem'}}>
+                            <div ref={mapRef} style={{width:'100%', height:'280px', borderRadius:'14px', overflow:'hidden', border:'1px solid var(--border)', marginTop:'0.75rem'}} />
+                            <p style={{fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'0.4rem'}}>
+                                🔴 Bucket list &nbsp;·&nbsp; 🟢 Visited &nbsp;·&nbsp; © OpenStreetMap contributors
+                            </p>
+                        </div>
+                    )}
 
-                    <div style={{marginBottom: '3rem'}}>
-                        <h2 style={{fontSize: '1.25rem', fontWeight: '700', marginBottom: '1.25rem', color: 'var(--text)'}}>
-                            Places I've Visited ({visitedPlaces.length})
+                    {/* ── Filter pills ── */}
+                    {places.length > 0 && (
+                        <div style={{display:'flex', gap:'0.4rem', flexWrap:'wrap', marginBottom:'1.25rem'}}>
+                            {filterPill('all', `All (${places.length})`)}
+                            {PLACE_CATS.map(c => {
+                                const count = places.filter(p => catOf(p) === c.key).length;
+                                if (!count) return null;
+                                return filterPill(c.key, `${c.icon} ${c.label} (${count})`);
+                            })}
+                        </div>
+                    )}
+
+                    {/* ── Bucket List ── */}
+                    <div style={{marginBottom:'2.5rem'}}>
+                        <h2 style={{fontSize:'1.1rem', fontWeight:'700', marginBottom:'1rem', color:'var(--text)', display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                            On My List
+                            {filteredBucket.length > 0 && <span style={{fontWeight:'500', color:'var(--text-muted)', fontSize:'0.9rem'}}>({filteredBucket.length})</span>}
                         </h2>
-                        <div className="places-grid">
-                            {visitedPlaces.map(place => (
-                                <PlaceCard
-                                    key={place.id}
-                                    place={place}
-                                    onToggleStatus={onToggleStatus}
-                                    onDelete={onDeletePlace}
-                                />
-                            ))}
-                            {visitedPlaces.length === 0 && (
-                                <p style={{color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.95rem'}}>
-                                    No visited places yet. Start adding your travels!
-                                </p>
-                            )}
-                        </div>
+                        {filteredBucket.length > 0 ? (
+                            <div className="places-grid">
+                                {filteredBucket.map(place => (
+                                    <PlaceCard key={place.id} place={place} onToggleStatus={onToggleStatus} onDelete={onDeletePlace} />
+                                ))}
+                            </div>
+                        ) : (
+                            <p style={{color:'var(--text-muted)', fontStyle:'italic', fontSize:'0.9rem'}}>
+                                Nothing on your list yet. Add above or pick from the inspiration section below.
+                            </p>
+                        )}
                     </div>
 
-                    <div>
-                        <h2 style={{fontSize: '1.25rem', fontWeight: '700', marginBottom: '1.25rem', color: 'var(--text)'}}>
-                            Bucket List ({bucketList.length})
+                    {/* ── Been There ── */}
+                    <div style={{marginBottom:'3rem'}}>
+                        <h2 style={{fontSize:'1.1rem', fontWeight:'700', marginBottom:'1rem', color:'var(--text)', display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                            Been There
+                            {filteredVisited.length > 0 && <span style={{fontWeight:'500', color:'var(--text-muted)', fontSize:'0.9rem'}}>({filteredVisited.length})</span>}
                         </h2>
-                        <div className="places-grid">
-                            {bucketList.map(place => (
-                                <PlaceCard
-                                    key={place.id}
-                                    place={place}
-                                    onToggleStatus={onToggleStatus}
-                                    onDelete={onDeletePlace}
-                                />
-                            ))}
-                            {bucketList.length === 0 && (
-                                <p style={{color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.95rem'}}>
-                                    No bucket list places yet. Where do you want to go?
-                                </p>
-                            )}
-                        </div>
+                        {filteredVisited.length > 0 ? (
+                            <div className="places-grid">
+                                {filteredVisited.map(place => (
+                                    <PlaceCard key={place.id} place={place} onToggleStatus={onToggleStatus} onDelete={onDeletePlace} />
+                                ))}
+                            </div>
+                        ) : (
+                            <p style={{color:'var(--text-muted)', fontStyle:'italic', fontSize:'0.9rem'}}>
+                                No visits logged yet — mark something as visited to see it here.
+                            </p>
+                        )}
                     </div>
 
-                    {/* ── Suggestions ── */}
-                    <div style={{marginTop:'3rem', paddingTop:'2.5rem', borderTop:'1px solid var(--border)'}}>
-                        <h2 style={{fontSize:'1.25rem', fontWeight:'700', marginBottom:'0.4rem', color:'var(--text)'}}>✨ Bucket List Inspiration</h2>
-                        <p style={{color:'var(--text-muted)', fontSize:'0.87rem', marginBottom:'1.5rem'}}>See how other travelers are building their dream lists.</p>
-                        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(255px, 1fr))', gap:'1.25rem'}}>
-                            {[
-                                { name:'Nomadic Matt', author:'Matt Kepnes', desc:'101 places to go before you die — a veteran blogger\'s essential list built over 15+ years of travel.', url:'https://www.nomadicmatt.com/travel-blogs/bucket-list-ideas/', img:'photo-1469854523086-cc02fe5d8800', tag:'Adventure' },
-                                { name:'The Blonde Abroad', author:'Kiersten Rich', desc:'A solo female traveler\'s curated bucket list spanning every continent with safety tips included.', url:'https://theblondeabroad.com/bucket-list/', img:'photo-1507525428034-b723cf961d3e', tag:'Solo Travel' },
-                                { name:'Expert Vagabond', author:'Matthew Karsten', desc:'The ultimate adventure bucket list for thrill-seekers — from volcano hikes to deep jungle treks.', url:'https://expertvagabond.com/travel-bucket-list/', img:'photo-1530521954074-e64f6810b32d', tag:'Adventure' },
-                                { name:'Adventurous Kate', author:'Kate McCulley', desc:'Once-in-a-lifetime experiences from a fearless solo traveler who\'s been to over 80 countries.', url:'https://www.adventurouskate.com/my-travel-bucket-list/', img:'photo-1488646953014-85cb44e25828', tag:'Solo Travel' },
-                                { name:'Hand Luggage Only', author:'Yaya & Lloyd', desc:'Stunning destinations and hidden gems — from iconic landmarks to off-the-beaten-path wonders.', url:'https://handluggageonly.co.uk/bucket-list/', img:'photo-1476514525535-07fb3b4ae5f1', tag:'Wanderlust' },
-                                { name:'World of Wanderlust', author:'Brooke Saward', desc:'A luxury traveler\'s take on the world\'s most extraordinary places to experience before you die.', url:'https://worldofwanderlust.com/bucket-list/', img:'photo-1500835556837-99ac94a94552', tag:'Luxury' },
-                            ].map(blog => (
-                                <a
-                                    key={blog.name}
-                                    href={blog.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{textDecoration:'none', display:'flex', flexDirection:'column', borderRadius:'14px', overflow:'hidden', border:'1px solid var(--border)', background:'var(--card-bg)', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', transition:'transform 0.18s, box-shadow 0.18s'}}
-                                    onMouseEnter={e => { e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.12)'; }}
-                                    onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)'; }}
-                                >
-                                    <div style={{position:'relative', height:'155px', overflow:'hidden', background:'#e8eaed'}}>
-                                        <img
-                                            src={`https://images.unsplash.com/${blog.img}?w=480&h=310&fit=crop&auto=format`}
-                                            alt=""
-                                            style={{width:'100%', height:'100%', objectFit:'cover'}}
-                                            loading="lazy"
-                                        />
-                                        <span style={{position:'absolute', top:'10px', left:'10px', background:'rgba(0,0,0,0.52)', color:'#fff', fontSize:'0.68rem', fontWeight:'600', padding:'3px 10px', borderRadius:'20px', letterSpacing:'0.04em'}}>
-                                            {blog.tag}
-                                        </span>
-                                    </div>
-                                    <div style={{padding:'1rem 1rem 1.1rem', flex:1, display:'flex', flexDirection:'column'}}>
-                                        <div style={{fontWeight:'700', fontSize:'0.95rem', color:'var(--text)', marginBottom:'0.1rem'}}>{blog.name}</div>
-                                        <div style={{fontSize:'0.76rem', color:'var(--text-muted)', marginBottom:'0.5rem'}}>by {blog.author}</div>
-                                        <p style={{fontSize:'0.81rem', color:'var(--text-muted)', lineHeight:'1.55', margin:'0 0 0.8rem', flex:1}}>{blog.desc}</p>
-                                        <span style={{fontSize:'0.8rem', fontWeight:'600', color:'var(--primary)'}}>Read more →</span>
-                                    </div>
-                                </a>
-                            ))}
+                    {/* ── Inspiration ── */}
+                    <div style={{borderTop:'1px solid var(--border)', paddingTop:'2rem'}}>
+                        <div onClick={() => setShowInspire(v => !v)} style={{display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', marginBottom: showInspire ? '1.25rem' : 0, userSelect:'none'}}>
+                            <div>
+                                <h2 style={{fontSize:'1.1rem', fontWeight:'700', color:'var(--text)', margin:0}}>✨ Get Inspired</h2>
+                                <p style={{color:'var(--text-muted)', fontSize:'0.82rem', margin:'0.2rem 0 0'}}>Curated bucket list ideas — click any to add instantly</p>
+                            </div>
+                            <span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{showInspire ? '▲' : '▼'}</span>
                         </div>
-                        <p style={{fontSize:'0.69rem', color:'#bbb', marginTop:'1.25rem', textAlign:'center'}}>
-                            Photos via <a href="https://unsplash.com" target="_blank" rel="noopener noreferrer" style={{color:'#bbb', textDecoration:'underline'}}>Unsplash</a> (Unsplash License) · All blog links are external and belong to their respective authors.
-                        </p>
+                        {showInspire && (
+                            <div>
+                                <div style={{display:'flex', gap:'0.4rem', flexWrap:'wrap', marginBottom:'1rem'}}>
+                                    {PLACE_CATS.map(c => {
+                                        const sel = inspireCat === c.key;
+                                        return (
+                                            <button key={c.key} onClick={() => setInspireCat(c.key)}
+                                                style={{padding:'0.3rem 0.8rem', borderRadius:'999px', border: sel ? '1.5px solid var(--primary)' : '1.5px solid var(--border)', background: sel ? 'rgba(14,165,233,0.1)' : 'transparent', color: sel ? 'var(--primary)' : 'var(--text-muted)', fontFamily:'Inter, sans-serif', fontWeight:'600', fontSize:'0.8rem', cursor:'pointer'}}>
+                                                {c.icon} {c.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(175px, 1fr))', gap:'0.55rem'}}>
+                                    {(INSPIRE_DATA[inspireCat] || []).map((item, i) => {
+                                        const already = places.some(p => p.name.toLowerCase() === item.name.toLowerCase());
+                                        return (
+                                            <button key={i} onClick={() => addInspireItem(item, inspireCat)} disabled={already}
+                                                style={{textAlign:'left', padding:'0.75rem 0.9rem', borderRadius:'10px', border:'1.5px solid var(--border)', background: already ? 'var(--surface)' : 'var(--card-bg)', cursor: already ? 'default' : 'pointer', opacity: already ? 0.55 : 1, transition:'all 0.15s'}}
+                                                onMouseEnter={e => { if (!already) { e.currentTarget.style.borderColor='var(--primary)'; e.currentTarget.style.background='rgba(14,165,233,0.05)'; } }}
+                                                onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.background= already ? 'var(--surface)' : 'var(--card-bg)'; }}>
+                                                <div style={{fontWeight:'600', fontSize:'0.84rem', color:'var(--text)', marginBottom:'0.12rem'}}>{item.name}</div>
+                                                {item.loc && <div style={{fontSize:'0.73rem', color:'var(--text-muted)'}}>{item.loc}</div>}
+                                                <div style={{fontSize:'0.72rem', fontWeight:'700', color: already ? 'var(--text-muted)' : 'var(--primary)', marginTop:'0.4rem'}}>{already ? '✓ On your list' : '+ Add to list'}</div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             );
         }
 
         function PlaceCard({ place, onToggleStatus, onDelete }) {
+            const CAT_ICONS = { destination:'🌍', restaurant:'🍽️', experience:'🎭', adventure:'🥾', cultural:'🏛️', beach:'🏖️' };
+            const cat = place.category || 'destination';
+            const icon = CAT_ICONS[cat] || '📌';
             return (
                 <div className={`place-card ${place.visited ? 'visited' : 'bucket'}`}>
-                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'start'}}>
-                        <div>
-                            <h3 className="place-name">{place.name}</h3>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'start'}}>
+                        <div style={{flex:1, minWidth:0}}>
+                            <div style={{display:'flex', alignItems:'center', gap:'0.35rem', marginBottom:'0.15rem'}}>
+                                <span style={{fontSize:'0.95rem'}}>{icon}</span>
+                                <h3 className="place-name" style={{margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{place.name}</h3>
+                            </div>
+                            {place.location && (
+                                <div style={{fontSize:'0.74rem', color:'var(--text-muted)', marginBottom:'0.25rem'}}>{place.location}</div>
+                            )}
                             <span className={`place-status ${place.visited ? 'visited' : 'bucket'}`}>
-                                {place.visited ? 'Visited' : 'Bucket List'}
+                                {place.visited ? '✓ Been There' : '○ On My List'}
                             </span>
                         </div>
-                        <button className="delete-btn" onClick={() => onDelete(place.id)}>×</button>
+                        <button className="delete-btn" onClick={() => onDelete(place.id)} style={{flexShrink:0, marginLeft:'0.5rem'}}>×</button>
                     </div>
-                    <button
-                        className="btn"
-                        onClick={() => onToggleStatus(place.id, place.visited)}
-                        style={{width: '100%', marginTop: '1rem', fontSize: '0.8rem'}}
-                    >
-                        {place.visited ? 'Move to Bucket List' : 'Mark as Visited'}
+                    <button className="btn" onClick={() => onToggleStatus(place.id, place.visited)}
+                        style={{width:'100%', marginTop:'0.85rem', fontSize:'0.8rem'}}>
+                        {place.visited ? 'Move to List' : 'Mark as Visited'}
                     </button>
                 </div>
             );
