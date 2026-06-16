@@ -4843,7 +4843,7 @@ ${buildTripContext(active)}`;
                     const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
                         body: {
                             message: `Recommend diverse restaurants in ${itinerary.destination || 'this destination'} for ${itinerary.travelers || 1} traveler${(itinerary.travelers||1)===1?'':'s'}.${cuisines ? ` Favorite cuisines: ${cuisines}.` : ''}${dietary ? ` Dietary needs: ${dietary}.` : ''}${style ? ` Dining style preference: ${style}.` : ''} Budget level: ${budgetLabel}. Trip style: ${(itinerary.trip_types||[]).join(', ')||'leisure'}. Include variety across neighborhoods, price points, and meal times. Prioritize local favorites over tourist traps.`,
-                            systemPrompt: `You are a world-class food critic and local guide. Respond ONLY with valid JSON — a raw array, no markdown, no code fences. Each element: { "name": string, "cuisine": string, "price_range": "$"|"$$"|"$$$"|"$$$$", "description": string (2 engaging sentences on why it's special and a must-visit), "neighborhood": string, "best_for": "Breakfast"|"Lunch"|"Dinner"|"Coffee & Snacks"|"Any meal" }. Give exactly 8 specific, highly-rated restaurants.`,
+                            systemPrompt: `You are a world-class food critic and local guide with deep knowledge of restaurant scenes globally. Respond ONLY with valid JSON — a raw array, no markdown, no code fences. Each element: { "name": string (exact official name), "cuisine": string, "price_range": "$"|"$$"|"$$$"|"$$$$", "rating": number (your honest estimate 1.0-5.0 based on reputation and quality, one decimal place), "description": string (2 engaging sentences on why it's special and a must-visit), "neighborhood": string, "best_for": "Breakfast"|"Lunch"|"Dinner"|"Coffee & Snacks"|"Any meal", "known_for": string (1 signature dish or drink) }. Give exactly 8 specific restaurants you are highly confident exist and are well-regarded.`,
                             history: []
                         }
                     });
@@ -6011,21 +6011,37 @@ ${buildTripContext(active)}`;
 
                             {foodRecs.length > 0 && (
                                 <div style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
-                                    {foodRecs.map(rec => (
-                                        <div key={rec.id} style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'12px', padding:'1rem 1.1rem'}}>
-                                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'0.5rem', marginBottom:'0.4rem'}}>
-                                                <div>
-                                                    <div style={{fontWeight:'700', fontSize:'0.95rem', color:'var(--text)'}}>{rec.name}</div>
-                                                    <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'0.1rem'}}>{rec.cuisine} · {rec.price_range} · {rec.neighborhood}</div>
+                                    {foodRecs.map(rec => {
+                                        const mapsUrl   = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rec.name + ' ' + (itinerary.destination || ''))}`;
+                                        const redditUrl = `https://www.reddit.com/search/?q=${encodeURIComponent(rec.name + ' ' + (itinerary.destination || '') + ' restaurant review')}&sort=relevance`;
+                                        const stars = rec.rating ? '★'.repeat(Math.round(rec.rating)) + '☆'.repeat(5 - Math.round(rec.rating)) : null;
+                                        return (
+                                            <div key={rec.id} style={{background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'12px', padding:'1rem 1.1rem'}}>
+                                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'0.5rem', marginBottom:'0.35rem'}}>
+                                                    <div>
+                                                        <div style={{fontWeight:'700', fontSize:'0.95rem', color:'var(--text)'}}>{rec.name}</div>
+                                                        <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'0.1rem'}}>{rec.cuisine} · {rec.price_range} · {rec.neighborhood}</div>
+                                                    </div>
+                                                    <span style={{fontSize:'0.72rem', fontWeight:'700', padding:'0.18rem 0.55rem', borderRadius:'999px', background:'rgba(14,165,233,0.1)', color:'var(--primary)', flexShrink:0, whiteSpace:'nowrap'}}>{rec.best_for}</span>
                                                 </div>
-                                                <span style={{fontSize:'0.72rem', fontWeight:'700', padding:'0.18rem 0.55rem', borderRadius:'999px', background:'rgba(14,165,233,0.1)', color:'var(--primary)', flexShrink:0, whiteSpace:'nowrap'}}>{rec.best_for}</span>
+                                                {stars && (
+                                                    <div style={{fontSize:'0.8rem', marginBottom:'0.35rem'}}>
+                                                        <span style={{color:'#F59E0B', letterSpacing:'1px'}}>{stars}</span>
+                                                        <span style={{color:'var(--text-muted)', marginLeft:'0.35rem', fontWeight:'600'}}>{rec.rating?.toFixed(1)} · AI estimate</span>
+                                                    </div>
+                                                )}
+                                                {rec.known_for && (
+                                                    <div style={{fontSize:'0.78rem', color:'var(--text-muted)', marginBottom:'0.35rem'}}>🍴 Known for: <strong style={{color:'var(--text)'}}>{rec.known_for}</strong></div>
+                                                )}
+                                                <p style={{fontSize:'0.85rem', color:'var(--text)', lineHeight:'1.55', margin:'0 0 0.65rem'}}>{rec.description}</p>
+                                                <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'center'}}>
+                                                    <button onClick={() => addRestToSchedule(rec)} className="btn" style={{fontSize:'0.75rem', padding:'0.28rem 0.7rem'}}>+ Add to schedule</button>
+                                                    <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="gov-link-btn" style={{fontSize:'0.75rem', padding:'0.28rem 0.7rem', textDecoration:'none'}}>🗺️ Google Maps</a>
+                                                    <a href={redditUrl} target="_blank" rel="noopener noreferrer" className="gov-link-btn" style={{fontSize:'0.75rem', padding:'0.28rem 0.7rem', textDecoration:'none', background:'#FF4500'}}>Reddit reviews</a>
+                                                </div>
                                             </div>
-                                            <p style={{fontSize:'0.85rem', color:'var(--text)', lineHeight:'1.55', margin:'0 0 0.6rem'}}>{rec.description}</p>
-                                            <button onClick={() => addRestToSchedule(rec)} className="btn" style={{fontSize:'0.75rem', padding:'0.28rem 0.7rem'}}>
-                                                + Add to Day 1 schedule
-                                            </button>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
