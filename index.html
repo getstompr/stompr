@@ -2154,6 +2154,7 @@
                             {activeTab === 'places' && (
                                 <PlacesView
                                     places={places}
+                                    profile={profile}
                                     onAddPlace={addPlace}
                                     onToggleStatus={togglePlaceStatus}
                                     onDeletePlace={deletePlace}
@@ -3846,7 +3847,7 @@
             );
         }
 
-        function PlacesView({ places, onAddPlace, onToggleStatus, onDeletePlace }) {
+        function PlacesView({ places, profile, onAddPlace, onToggleStatus, onDeletePlace }) {
             const { useState, useEffect, useRef } = React;
 
             const PLACE_CATS = [
@@ -3912,6 +3913,9 @@
             const [suggestions,   setSuggestions]    = useState([]);
             const [showInspire,   setShowInspire]    = useState(false);
             const [inspireCat,    setInspireCat]     = useState('destination');
+            const [aiRecs,        setAiRecs]         = useState({});   // { cat: [{name, loc, why}] }
+            const [aiLoading,     setAiLoading]      = useState('');   // cat key while loading
+            const [aiError,       setAiError]        = useState('');
             const debounceRef = useRef(null);
             const mapRef      = useRef(null);
             const mapObj      = useRef(null);
@@ -3962,6 +3966,34 @@
             const addInspireItem = (item, cat) => {
                 if (places.some(p => p.name.toLowerCase() === item.name.toLowerCase())) return;
                 onAddPlace(item.name, false, null, null, cat, item.loc || '');
+            };
+
+            const getAIRecs = async (cat) => {
+                if (aiLoading) return;
+                setAiLoading(cat); setAiError('');
+                const catLabel = PLACE_CATS.find(c => c.key === cat)?.label || cat;
+                const existingNames = places.map(p => p.name).join(', ') || 'none yet';
+                const prefs = [];
+                if (profile?.travel_types?.length)     prefs.push(`travel style: ${profile.travel_types.join(', ')}`);
+                if (profile?.travel_interests?.length) prefs.push(`interests: ${profile.travel_interests.join(', ')}`);
+                if (profile?.budget)                   prefs.push(`budget level: ${profile.budget}`);
+                if (profile?.home_base)                prefs.push(`based in: ${profile.home_base}`);
+                if (profile?.food_prefs?.cuisines?.length) prefs.push(`cuisine loves: ${profile.food_prefs.cuisines.join(', ')}`);
+                const prefStr = prefs.length ? prefs.join('; ') : 'no preferences set';
+                const systemPrompt = `You are a world-class travel curator. Respond ONLY with valid JSON — a raw array, no markdown, no code fences, no explanation. Each element: { "name": string, "loc": string (city/country), "why": string (one compelling sentence, max 12 words) }`;
+                const message = `Suggest 10 bucket list ${catLabel.toLowerCase()} items that would excite this traveler. Their preferences: ${prefStr}. They already have on their list: ${existingNames}. Do NOT repeat any of those. Make suggestions highly personalized, specific, and inspiring — not generic.`;
+                try {
+                    const { data, error: fnErr } = await supabaseClient.functions.invoke('ai-chat', {
+                        body: { message, systemPrompt, history: [] }
+                    });
+                    const errCode = fnErr ? ((await fnErr.context?.json?.().catch(() => ({}))).error || fnErr.message) : data?.error;
+                    if (errCode) { setAiError('Could not load suggestions. Try again.'); setAiLoading(''); return; }
+                    let raw = (data.message || '').replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) setAiRecs(prev => ({ ...prev, [cat]: parsed }));
+                    else setAiError('Unexpected response. Try again.');
+                } catch { setAiError('Could not load suggestions. Try again.'); }
+                setAiLoading('');
             };
 
             useEffect(() => {
@@ -4132,13 +4164,14 @@
                         <div onClick={() => setShowInspire(v => !v)} style={{display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', marginBottom: showInspire ? '1.25rem' : 0, userSelect:'none'}}>
                             <div>
                                 <h2 style={{fontSize:'1.1rem', fontWeight:'700', color:'var(--text)', margin:0}}>✨ Get Inspired</h2>
-                                <p style={{color:'var(--text-muted)', fontSize:'0.82rem', margin:'0.2rem 0 0'}}>Curated bucket list ideas — click any to add instantly</p>
+                                <p style={{color:'var(--text-muted)', fontSize:'0.82rem', margin:'0.2rem 0 0'}}>Curated ideas — or let AI personalize them for you</p>
                             </div>
                             <span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{showInspire ? '▲' : '▼'}</span>
                         </div>
                         {showInspire && (
                             <div>
-                                <div style={{display:'flex', gap:'0.4rem', flexWrap:'wrap', marginBottom:'1rem'}}>
+                                {/* Category tabs + personalize button */}
+                                <div style={{display:'flex', gap:'0.4rem', flexWrap:'wrap', marginBottom:'0.9rem', alignItems:'center'}}>
                                     {PLACE_CATS.map(c => {
                                         const sel = inspireCat === c.key;
                                         return (
@@ -4149,21 +4182,50 @@
                                         );
                                     })}
                                 </div>
+
+                                {/* AI personalize button */}
+                                <div style={{display:'flex', alignItems:'center', gap:'0.75rem', marginBottom:'1rem'}}>
+                                    <button
+                                        onClick={() => getAIRecs(inspireCat)}
+                                        disabled={!!aiLoading}
+                                        style={{display:'flex', alignItems:'center', gap:'0.45rem', padding:'0.5rem 1.1rem', borderRadius:'999px', border:'1.5px solid var(--primary)', background:'rgba(14,165,233,0.1)', color:'var(--primary)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.82rem', cursor: aiLoading ? 'default' : 'pointer', opacity: aiLoading ? 0.65 : 1, transition:'all 0.15s'}}
+                                        onMouseEnter={e => { if (!aiLoading) e.currentTarget.style.background='rgba(14,165,233,0.2)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background='rgba(14,165,233,0.1)'; }}>
+                                        {aiLoading === inspireCat
+                                            ? <><span style={{display:'inline-block', width:'12px', height:'12px', border:'2px solid var(--primary)', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.7s linear infinite'}} /> Personalizing…</>
+                                            : <><span>🤖</span> Personalize for me</>
+                                        }
+                                    </button>
+                                    {aiRecs[inspireCat] && (
+                                        <button onClick={() => setAiRecs(prev => { const n = {...prev}; delete n[inspireCat]; return n; })}
+                                            style={{fontSize:'0.76rem', color:'var(--text-muted)', background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline'}}>
+                                            Show curated list
+                                        </button>
+                                    )}
+                                    {aiError && <span style={{fontSize:'0.78rem', color:'#EF4444'}}>{aiError}</span>}
+                                </div>
+
+                                {/* Item grid — AI results or static list */}
                                 <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(175px, 1fr))', gap:'0.55rem'}}>
-                                    {(INSPIRE_DATA[inspireCat] || []).map((item, i) => {
+                                    {(aiRecs[inspireCat] || INSPIRE_DATA[inspireCat] || []).map((item, i) => {
                                         const already = places.some(p => p.name.toLowerCase() === item.name.toLowerCase());
+                                        const isAI = !!aiRecs[inspireCat];
                                         return (
                                             <button key={i} onClick={() => addInspireItem(item, inspireCat)} disabled={already}
-                                                style={{textAlign:'left', padding:'0.75rem 0.9rem', borderRadius:'10px', border:'1.5px solid var(--border)', background: already ? 'var(--surface)' : 'var(--card-bg)', cursor: already ? 'default' : 'pointer', opacity: already ? 0.55 : 1, transition:'all 0.15s'}}
-                                                onMouseEnter={e => { if (!already) { e.currentTarget.style.borderColor='var(--primary)'; e.currentTarget.style.background='rgba(14,165,233,0.05)'; } }}
-                                                onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.background= already ? 'var(--surface)' : 'var(--card-bg)'; }}>
+                                                style={{textAlign:'left', padding:'0.75rem 0.9rem', borderRadius:'10px', border: isAI ? '1.5px solid rgba(14,165,233,0.3)' : '1.5px solid var(--border)', background: already ? 'var(--surface)' : isAI ? 'rgba(14,165,233,0.04)' : 'var(--card-bg)', cursor: already ? 'default' : 'pointer', opacity: already ? 0.55 : 1, transition:'all 0.15s'}}
+                                                onMouseEnter={e => { if (!already) { e.currentTarget.style.borderColor='var(--primary)'; e.currentTarget.style.background='rgba(14,165,233,0.08)'; } }}
+                                                onMouseLeave={e => { e.currentTarget.style.borderColor= isAI ? 'rgba(14,165,233,0.3)' : 'var(--border)'; e.currentTarget.style.background= already ? 'var(--surface)' : isAI ? 'rgba(14,165,233,0.04)' : 'var(--card-bg)'; }}>
                                                 <div style={{fontWeight:'600', fontSize:'0.84rem', color:'var(--text)', marginBottom:'0.12rem'}}>{item.name}</div>
-                                                {item.loc && <div style={{fontSize:'0.73rem', color:'var(--text-muted)'}}>{item.loc}</div>}
-                                                <div style={{fontSize:'0.72rem', fontWeight:'700', color: already ? 'var(--text-muted)' : 'var(--primary)', marginTop:'0.4rem'}}>{already ? '✓ On your list' : '+ Add to list'}</div>
+                                                {item.loc && <div style={{fontSize:'0.73rem', color:'var(--text-muted)', marginBottom: item.why ? '0.25rem' : 0}}>{item.loc}</div>}
+                                                {item.why && <div style={{fontSize:'0.72rem', color:'var(--text-muted)', fontStyle:'italic', lineHeight:'1.4', marginBottom:'0.25rem'}}>{item.why}</div>}
+                                                <div style={{fontSize:'0.72rem', fontWeight:'700', color: already ? 'var(--text-muted)' : 'var(--primary)', marginTop:'0.35rem'}}>{already ? '✓ On your list' : '+ Add to list'}</div>
                                             </button>
                                         );
                                     })}
                                 </div>
+                                {aiRecs[inspireCat] && (
+                                    <p style={{fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'0.75rem'}}>🤖 AI-generated based on your travel profile · <button onClick={() => getAIRecs(inspireCat)} style={{background:'none', border:'none', color:'var(--primary)', fontSize:'0.7rem', cursor:'pointer', padding:0, fontFamily:'Inter, sans-serif'}}>Regenerate</button></p>
+                                )}
                             </div>
                         )}
                     </div>
