@@ -1028,7 +1028,7 @@
                         const hits = d.hits || [];
                         // pick the hit with the most likes as a proxy for "most iconic"
                         const best = hits.reduce((a, b) => (b.likes > (a?.likes ?? -1) ? b : a), null);
-                        const u = best?.webformatURL;
+                        const u = best?.largeImageURL || best?.webformatURL;
                         if (u) { _photoCache[destination] = u; setUrl(u); }
                     })
                     .catch(err => console.error('[Pixabay error]', destination, err));
