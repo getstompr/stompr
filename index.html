@@ -64,7 +64,7 @@
     <link rel="apple-touch-icon" href="Stompr_globe.png">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1007,7 +1007,6 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        /* @jsxRuntime classic */
         const { useState, useEffect } = React;
         const supabaseClient = window.supabase.createClient(
             'https://iqczpwzllkahswgzwzhc.supabase.co',
