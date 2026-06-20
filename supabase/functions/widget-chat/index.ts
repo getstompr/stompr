@@ -9,7 +9,6 @@ const MONTHLY_LIMITS: Record<string, number | null> = {
 
 const RATE_LIMIT_PER_MINUTE = 10
 
-// Prefer Cloudflare's header when present, then standard proxy headers.
 function getClientIp(req: Request): string {
   return (
     req.headers.get('cf-connecting-ip') ||
@@ -19,13 +18,12 @@ function getClientIp(req: Request): string {
   )
 }
 
-// Build CORS headers, respecting the tenant's allowed_origins list.
 function corsHeaders(req: Request, allowedOrigins: string[] | null): Record<string, string> {
   const origin = req.headers.get('origin') || '*'
   const allowed =
     !allowedOrigins || allowedOrigins.length === 0
-      ? origin                                          // any origin
-      : allowedOrigins.includes(origin) ? origin : ''  // must match
+      ? origin
+      : allowedOrigins.includes(origin) ? origin : ''
 
   return {
     'Access-Control-Allow-Origin': allowed || 'null',
@@ -41,6 +39,66 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
   })
 }
 
+async function sendLeadNotification({
+  tenantName,
+  tenantEmail,
+  visitorName,
+  visitorEmail,
+  messages,
+}: {
+  tenantName: string
+  tenantEmail: string
+  visitorName: string | null
+  visitorEmail: string
+  messages: { role: string; content: string }[]
+}) {
+  const resendKey = Deno.env.get('RESEND_API_KEY')
+  if (!resendKey) return
+
+  const visitorLabel = visitorName ? `${visitorName} (${visitorEmail})` : visitorEmail
+
+  const messageRows = messages.map(m => `
+    <div style="margin-bottom:12px;">
+      <div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;color:${m.role === 'user' ? '#7C3AED' : '#0EA5E9'};margin-bottom:2px;">${m.role}</div>
+      <div style="font-size:0.88rem;color:#374151;line-height:1.5;">${m.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+    </div>`).join('')
+
+  const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;color:#111;">
+  <div style="background:#0EA5E9;padding:24px 32px;border-radius:12px 12px 0 0;">
+    <h1 style="color:white;margin:0;font-size:1.1rem;font-weight:800;">New lead via ${tenantName}</h1>
+  </div>
+  <div style="background:white;padding:28px 32px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 12px 12px;">
+    <p style="margin:0 0 6px;font-size:1rem;font-weight:700;">${visitorName || 'Anonymous visitor'}</p>
+    <p style="margin:0 0 24px;color:#6B7280;font-size:0.88rem;">${visitorEmail}</p>
+    <a href="mailto:${visitorEmail}" style="display:inline-block;background:#0EA5E9;color:white;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:700;font-size:0.88rem;">Reply to ${visitorName || visitorEmail} →</a>
+    <hr style="margin:28px 0;border:none;border-top:1px solid #F3F4F6;" />
+    <p style="margin:0 0 14px;font-weight:700;font-size:0.8rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;">Their conversation</p>
+    ${messageRows}
+    <hr style="margin:28px 0;border:none;border-top:1px solid #F3F4F6;" />
+    <p style="margin:0;font-size:0.72rem;color:#9CA3AF;">Sent by <a href="https://stompr.io" style="color:#9CA3AF;">Stompr</a></p>
+  </div>
+</div>`
+
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${resendKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Stompr Leads <leads@stompr.io>',
+        to: [tenantEmail],
+        subject: `New lead: ${visitorLabel}`,
+        html,
+      }),
+    })
+  } catch (err) {
+    console.error('Lead notification failed:', err)
+  }
+}
+
 serve(async (req) => {
   // ── CORS preflight ──────────────────────────────────────────────────────────
   if (req.method === 'OPTIONS') {
@@ -51,7 +109,7 @@ serve(async (req) => {
     return json({ error: 'Method not allowed' }, 405)
   }
 
-  // ── IP rate limit (checked before token auth to block bots early) ──────────
+  // ── IP rate limit ───────────────────────────────────────────────────────────
   const clientIp = getClientIp(req)
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -64,7 +122,6 @@ serve(async (req) => {
 
     if (rlErr) {
       console.error('Rate limit check failed:', rlErr.message)
-      // Fail open — don't block legitimate users if the DB call errors
     } else if (reqCount > RATE_LIMIT_PER_MINUTE) {
       return json(
         { error: 'Too many requests. Please wait a moment and try again.' },
@@ -74,16 +131,15 @@ serve(async (req) => {
     }
   }
 
-  // ── Auth: widget token from header ─────────────────────────────────────────
+  // ── Auth: widget token ──────────────────────────────────────────────────────
   const widgetToken = req.headers.get('x-widget-token')
   if (!widgetToken) {
     return json({ error: 'Missing x-widget-token header' }, 401)
   }
 
-  // ── Validate token + load tenant ───────────────────────────────────────────
   const { data: tokenRow, error: tokenErr } = await supabase
     .from('widget_tokens')
-    .select('id, tenant_id, allowed_origins, active, tenants(id, plan, active, monthly_limit, monthly_used, usage_reset_at, name)')
+    .select('id, tenant_id, allowed_origins, active, tenants(id, plan, active, monthly_limit, monthly_used, usage_reset_at, name, email)')
     .eq('token', widgetToken)
     .eq('active', true)
     .single()
@@ -98,11 +154,10 @@ serve(async (req) => {
     return json({ error: 'Tenant account is inactive' }, 403)
   }
 
-  // ── Usage cap check ────────────────────────────────────────────────────────
+  // ── Usage cap ───────────────────────────────────────────────────────────────
   const now = new Date()
   const resetAt = new Date(tenant.usage_reset_at as string)
 
-  // Roll over monthly counter if the reset window has passed
   if (now >= resetAt) {
     const nextReset = new Date(resetAt)
     nextReset.setMonth(nextReset.getMonth() + 1)
@@ -118,7 +173,7 @@ serve(async (req) => {
     return json({ error: 'Monthly conversation limit reached' }, 429)
   }
 
-  // ── Parse request body ─────────────────────────────────────────────────────
+  // ── Parse body ──────────────────────────────────────────────────────────────
   let body: {
     message: string
     history?: { role: string; content: string }[]
@@ -141,7 +196,7 @@ serve(async (req) => {
 
   const cors = corsHeaders(req, tokenRow.allowed_origins)
 
-  // ── Call Claude ────────────────────────────────────────────────────────────
+  // ── Call Claude ─────────────────────────────────────────────────────────────
   const systemPrompt = `You are an AI travel concierge for ${tenant.name}. Help visitors plan trips, answer destination questions, suggest itineraries, and assist with bookings. Be warm, concise, and practical. If a visitor seems ready to book, encourage them to share their contact details so an agent can follow up.`
 
   const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -170,17 +225,19 @@ serve(async (req) => {
 
   const reply: string = aiData.content[0].text
 
-  // ── Persist conversation + update usage ───────────────────────────────────
+  // ── Persist conversation ────────────────────────────────────────────────────
   const sid = session_id || crypto.randomUUID()
   const newMessage = { role: 'user', content: message, ts: now.toISOString() }
   const newReply   = { role: 'assistant', content: reply, ts: new Date().toISOString() }
 
-  // Upsert conversation by session_id
   const { data: existing } = await supabase
     .from('widget_conversations')
-    .select('id, messages')
+    .select('id, messages, visitor_email, lead_notified')
     .eq('session_id', sid)
     .maybeSingle()
+
+  // A lead is "new" if we just received an email we didn't have before
+  const isNewLead = !!visitor_email && !existing?.visitor_email && !existing?.lead_notified
 
   if (existing) {
     const updated = [...(existing.messages as unknown[]), newMessage, newReply]
@@ -190,6 +247,7 @@ serve(async (req) => {
         messages: updated,
         visitor_name: visitor_name || undefined,
         visitor_email: visitor_email || undefined,
+        ...(isNewLead ? { lead_notified: true } : {}),
       })
       .eq('id', existing.id)
   } else {
@@ -200,10 +258,22 @@ serve(async (req) => {
       visitor_name: visitor_name || null,
       visitor_email: visitor_email || null,
       messages: [newMessage, newReply],
+      lead_notified: !!visitor_email,
     })
   }
 
-  // Increment monthly usage and update last_used_at on the token
+  // ── Send lead notification (fire-and-forget) ────────────────────────────────
+  if (isNewLead || (!existing && visitor_email)) {
+    sendLeadNotification({
+      tenantName:   tenant.name as string,
+      tenantEmail:  tenant.email as string,
+      visitorName:  visitor_name || null,
+      visitorEmail: visitor_email!,
+      messages:     [...history, { role: 'user', content: message }, { role: 'assistant', content: reply }],
+    })
+  }
+
+  // ── Update usage ────────────────────────────────────────────────────────────
   await Promise.all([
     supabase
       .from('tenants')
