@@ -2225,12 +2225,19 @@
             const [expandedConv, setExpandedConv] = useState(null);
             const [copiedId, setCopiedId] = useState(null);
 
+            const DEFAULT_PROMPT = `You are an AI travel concierge for {{brand_name}}. Help visitors plan trips, answer destination questions, suggest itineraries, and assist with bookings. Be warm, concise, and practical. If a visitor seems ready to book, encourage them to share their contact details so an agent can follow up.`;
+            const [promptDraft, setPromptDraft] = useState('');
+            const [savingPrompt, setSavingPrompt] = useState(false);
+            const [promptSaved, setPromptSaved] = useState(false);
+
             useEffect(() => { loadTenants(); }, []);
 
             useEffect(() => {
                 if (selectedTenant) {
                     loadTokens(selectedTenant.id);
                     loadConversations(selectedTenant.id);
+                    setPromptDraft(selectedTenant.system_prompt || DEFAULT_PROMPT);
+                    setPromptSaved(false);
                 }
             }, [selectedTenant]);
 
@@ -2294,6 +2301,16 @@
                 await navigator.clipboard.writeText(tok.token);
                 setCopiedId('tok_' + tok.id);
                 setTimeout(() => setCopiedId(null), 2000);
+            };
+
+            const savePrompt = async () => {
+                setSavingPrompt(true);
+                const valueToSave = promptDraft.trim() === DEFAULT_PROMPT.trim() ? null : promptDraft.trim();
+                await supabaseClient.from('tenants').update({ system_prompt: valueToSave }).eq('id', selectedTenant.id);
+                setSelectedTenant(prev => ({ ...prev, system_prompt: valueToSave }));
+                setSavingPrompt(false);
+                setPromptSaved(true);
+                setTimeout(() => setPromptSaved(false), 2000);
             };
 
             const planColors = { starter: '#6B7280', agency: '#7C3AED', enterprise: '#0EA5E9' };
@@ -2408,6 +2425,22 @@
                                         {render()}
                                     </div>
                                 ))}
+                            </div>
+
+                            {/* System Prompt */}
+                            <div style={{ ...card, marginBottom:'1.25rem' }}>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.5rem' }}>
+                                    <h3 style={{ fontWeight:800, fontSize:'0.95rem', margin:0 }}>AI System Prompt</h3>
+                                    <button onClick={savePrompt} disabled={savingPrompt}
+                                        style={{ ...btn(promptSaved ? '#16A34A' : '#0EA5E9', true) }}>
+                                        {promptSaved ? '✓ Saved' : savingPrompt ? 'Saving…' : 'Save'}
+                                    </button>
+                                </div>
+                                <p style={{ fontSize:'0.75rem', color:'var(--text-muted)', margin:'0 0 0.75rem' }}>
+                                    Use <code style={{ background:'#F3F4F6', padding:'1px 5px', borderRadius:'4px' }}>{'{{brand_name}}'}</code> where you want the agency name to appear.
+                                </p>
+                                <textarea value={promptDraft} onChange={e => setPromptDraft(e.target.value)} rows={5}
+                                    style={{ width:'100%', padding:'0.65rem 0.75rem', borderRadius:'8px', border:'1px solid #E5E7EB', fontSize:'0.85rem', fontFamily:'inherit', lineHeight:'1.6', resize:'vertical', outline:'none', boxSizing:'border-box' }} />
                             </div>
 
                             {/* Tokens */}

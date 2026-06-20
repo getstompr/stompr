@@ -139,7 +139,7 @@ serve(async (req) => {
 
   const { data: tokenRow, error: tokenErr } = await supabase
     .from('widget_tokens')
-    .select('id, tenant_id, allowed_origins, active, tenants(id, plan, active, monthly_limit, monthly_used, usage_reset_at, name, email)')
+    .select('id, tenant_id, allowed_origins, active, tenants(id, plan, active, monthly_limit, monthly_used, usage_reset_at, name, email, system_prompt)')
     .eq('token', widgetToken)
     .eq('active', true)
     .single()
@@ -197,7 +197,9 @@ serve(async (req) => {
   const cors = corsHeaders(req, tokenRow.allowed_origins)
 
   // ── Call Claude ─────────────────────────────────────────────────────────────
-  const systemPrompt = `You are an AI travel concierge for ${tenant.name}. Help visitors plan trips, answer destination questions, suggest itineraries, and assist with bookings. Be warm, concise, and practical. If a visitor seems ready to book, encourage them to share their contact details so an agent can follow up.`
+  const defaultPrompt = `You are an AI travel concierge for {{brand_name}}. Help visitors plan trips, answer destination questions, suggest itineraries, and assist with bookings. Be warm, concise, and practical. If a visitor seems ready to book, encourage them to share their contact details so an agent can follow up.`
+  const systemPrompt = ((tenant.system_prompt as string | null) || defaultPrompt)
+    .replace(/\{\{brand_name\}\}/g, tenant.name as string)
 
   const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
