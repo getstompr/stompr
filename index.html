@@ -2140,6 +2140,9 @@
                             <button className={`tab ${activeTab === 'itinerary' ? 'active' : ''}`} onClick={() => setActiveTab('itinerary')}>My Itineraries</button>
                             <button className={`tab ${activeTab === 'places' ? 'active' : ''}`} onClick={() => setActiveTab('places')}>My World</button>
                             <button className={`tab ${activeTab === 'community' ? 'active' : ''}`} onClick={() => setActiveTab('community')}>My Community</button>
+                            {session.user.email === 'emeredit@chicagobooth.edu' && (
+                                <button className={`tab ${activeTab === 'admin' ? 'active' : ''}`} onClick={() => setActiveTab('admin')}>Agent Dashboard</button>
+                            )}
                         </div>
                     </header>
 
@@ -2188,10 +2191,327 @@
                                     />
                                 </div>
                             )}
+
+                            {activeTab === 'admin' && session.user.email === 'emeredit@chicagobooth.edu' && (
+                                <AdminView session={session} />
+                            )}
                             </div>
                         </div>
                         <footer style={{textAlign:'center',color:'#bbb',fontSize:'0.72rem',padding:'2rem 0 0.5rem'}}>© {new Date().getFullYear()} <a href="https://aelabs.llc" target="_blank" rel="noopener" style={{color:'#bbb',textDecoration:'underline'}}>AE Labs LLC</a></footer>
                     </div>
+                </div>
+            );
+        }
+
+        function AdminView({ session }) {
+            const SUPABASE_PROJECT = 'iqczpwzllkahswgzwzhc';
+            const WIDGET_JS_URL = `https://${SUPABASE_PROJECT}.supabase.co/storage/v1/object/public/widget/stompr-widget.js`;
+
+            const [tenants, setTenants] = useState([]);
+            const [selectedTenant, setSelectedTenant] = useState(null);
+            const [tokens, setTokens] = useState([]);
+            const [conversations, setConversations] = useState([]);
+            const [loadingTenants, setLoadingTenants] = useState(true);
+            const [loadingDetails, setLoadingDetails] = useState(false);
+
+            const [showAddTenant, setShowAddTenant] = useState(false);
+            const [tenantForm, setTenantForm] = useState({ name: '', email: '', plan: 'starter' });
+            const [addingTenant, setAddingTenant] = useState(false);
+
+            const [showAddToken, setShowAddToken] = useState(false);
+            const [tokenForm, setTokenForm] = useState({ label: '', origins: '' });
+            const [addingToken, setAddingToken] = useState(false);
+
+            const [expandedConv, setExpandedConv] = useState(null);
+            const [copiedId, setCopiedId] = useState(null);
+
+            useEffect(() => { loadTenants(); }, []);
+
+            useEffect(() => {
+                if (selectedTenant) {
+                    loadTokens(selectedTenant.id);
+                    loadConversations(selectedTenant.id);
+                }
+            }, [selectedTenant]);
+
+            const loadTenants = async () => {
+                setLoadingTenants(true);
+                const { data } = await supabaseClient.from('tenants').select('*').order('created_at', { ascending: false });
+                setTenants(data || []);
+                setLoadingTenants(false);
+            };
+
+            const loadTokens = async (tenantId) => {
+                setLoadingDetails(true);
+                const { data } = await supabaseClient.from('widget_tokens').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false });
+                setTokens(data || []);
+                setLoadingDetails(false);
+            };
+
+            const loadConversations = async (tenantId) => {
+                const { data } = await supabaseClient.from('widget_conversations')
+                    .select('id, created_at, session_id, visitor_name, visitor_email, messages')
+                    .eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(50);
+                setConversations(data || []);
+            };
+
+            const createTenant = async () => {
+                if (!tenantForm.name || !tenantForm.email) return;
+                setAddingTenant(true);
+                const { error } = await supabaseClient.from('tenants').insert({ name: tenantForm.name, email: tenantForm.email, plan: tenantForm.plan });
+                if (!error) { setTenantForm({ name: '', email: '', plan: 'starter' }); setShowAddTenant(false); await loadTenants(); }
+                setAddingTenant(false);
+            };
+
+            const createToken = async () => {
+                if (!selectedTenant) return;
+                setAddingToken(true);
+                const origins = tokenForm.origins.trim() ? tokenForm.origins.split(',').map(o => o.trim()).filter(Boolean) : null;
+                const { error } = await supabaseClient.from('widget_tokens').insert({ tenant_id: selectedTenant.id, label: tokenForm.label || 'Website', allowed_origins: origins });
+                if (!error) { setTokenForm({ label: '', origins: '' }); setShowAddToken(false); await loadTokens(selectedTenant.id); }
+                setAddingToken(false);
+            };
+
+            const toggleTenant = async (t) => {
+                await supabaseClient.from('tenants').update({ active: !t.active }).eq('id', t.id);
+                await loadTenants();
+                if (selectedTenant?.id === t.id) setSelectedTenant(prev => ({ ...prev, active: !prev.active }));
+            };
+
+            const toggleToken = async (t) => {
+                await supabaseClient.from('widget_tokens').update({ active: !t.active }).eq('id', t.id);
+                await loadTokens(selectedTenant.id);
+            };
+
+            const copySnippet = async (tok) => {
+                const snippet = `<script\n  src="${WIDGET_JS_URL}"\n  data-widget-token="${tok.token}"\n  data-brand-name="${selectedTenant.name}"\n  data-accent="#0EA5E9"\n  async\n><\/script>`;
+                await navigator.clipboard.writeText(snippet);
+                setCopiedId('snip_' + tok.id);
+                setTimeout(() => setCopiedId(null), 2000);
+            };
+
+            const copyToken = async (tok) => {
+                await navigator.clipboard.writeText(tok.token);
+                setCopiedId('tok_' + tok.id);
+                setTimeout(() => setCopiedId(null), 2000);
+            };
+
+            const planColors = { starter: '#6B7280', agency: '#7C3AED', enterprise: '#0EA5E9' };
+            const card = { background: 'white', borderRadius: '12px', padding: '1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #F3F4F6' };
+            const badge = (plan, overrideColor) => ({ display:'inline-block', padding:'2px 8px', borderRadius:'99px', fontSize:'0.7rem', fontWeight:700, background:(overrideColor || planColors[plan] || '#6B7280') + '22', color: overrideColor || planColors[plan] || '#6B7280' });
+            const btn = (color='#6B7280', filled=false) => ({ padding:'0.32rem 0.65rem', borderRadius:'7px', border: filled ? 'none' : '1px solid #E5E7EB', background: filled ? color : 'white', color: filled ? 'white' : color, cursor:'pointer', fontWeight:700, fontSize:'0.78rem', fontFamily:'inherit' });
+
+            return (
+                <div style={{ maxWidth: '860px', margin: '0 auto', paddingBottom: '2rem' }}>
+                    {/* Header */}
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        {selectedTenant ? (
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                                <button onClick={() => { setSelectedTenant(null); setTokens([]); setConversations([]); setShowAddToken(false); }}
+                                    style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', fontWeight:700, fontSize:'0.85rem', padding:0, display:'flex', alignItems:'center', gap:'0.3rem', fontFamily:'inherit' }}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                    All Agencies
+                                </button>
+                                <span style={{ color:'var(--text-muted)' }}>/</span>
+                                <span style={{ fontWeight:800, fontSize:'1rem' }}>{selectedTenant.name}</span>
+                            </div>
+                        ) : (
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                <div>
+                                    <h2 style={{ fontWeight:800, fontSize:'1.3rem', margin:0 }}>Agent Dashboard</h2>
+                                    <p style={{ color:'var(--text-muted)', fontSize:'0.85rem', marginTop:'0.25rem', marginBottom:0 }}>Manage white-label agency accounts</p>
+                                </div>
+                                <button onClick={() => setShowAddTenant(v => !v)} style={{ ...btn('#0EA5E9', true), padding:'0.5rem 1rem', fontSize:'0.85rem' }}>+ New Agency</button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Add Tenant Form */}
+                    {showAddTenant && !selectedTenant && (
+                        <div style={{ ...card, marginBottom:'1.25rem', border:'1px solid #BAE6FD', background:'#F0F9FF' }}>
+                            <h3 style={{ fontWeight:700, fontSize:'0.95rem', margin:'0 0 1rem' }}>New Agency</h3>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:'0.75rem', alignItems:'end' }}>
+                                {[['Name','text','Agency name…','name'],['Email','email','owner@agency.com','email']].map(([label,type,ph,key]) => (
+                                    <div key={key}>
+                                        <label style={{ fontSize:'0.75rem', fontWeight:600, color:'var(--text-muted)', display:'block', marginBottom:'0.25rem' }}>{label}</label>
+                                        <input type={type} value={tenantForm[key]} onChange={e => setTenantForm(f=>({...f,[key]:e.target.value}))} placeholder={ph}
+                                            style={{ width:'100%', padding:'0.5rem 0.75rem', borderRadius:'8px', border:'1px solid #D1D5DB', fontSize:'0.85rem', fontFamily:'inherit', outline:'none', boxSizing:'border-box' }} />
+                                    </div>
+                                ))}
+                                <div>
+                                    <label style={{ fontSize:'0.75rem', fontWeight:600, color:'var(--text-muted)', display:'block', marginBottom:'0.25rem' }}>Plan</label>
+                                    <select value={tenantForm.plan} onChange={e => setTenantForm(f=>({...f,plan:e.target.value}))}
+                                        style={{ padding:'0.5rem 0.75rem', borderRadius:'8px', border:'1px solid #D1D5DB', fontSize:'0.85rem', fontFamily:'inherit', background:'white', outline:'none', cursor:'pointer' }}>
+                                        <option value="starter">Starter</option>
+                                        <option value="agency">Agency</option>
+                                        <option value="enterprise">Enterprise</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style={{ display:'flex', gap:'0.5rem', marginTop:'0.75rem', justifyContent:'flex-end' }}>
+                                <button onClick={() => setShowAddTenant(false)} style={btn()}>Cancel</button>
+                                <button onClick={createTenant} disabled={addingTenant || !tenantForm.name || !tenantForm.email}
+                                    style={{ ...btn('#0EA5E9', true), opacity: (!tenantForm.name || !tenantForm.email) ? 0.5 : 1 }}>
+                                    {addingTenant ? 'Creating…' : 'Create Agency'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Tenants List */}
+                    {!selectedTenant && (
+                        loadingTenants ? <p style={{ color:'var(--text-muted)', fontSize:'0.9rem' }}>Loading…</p>
+                        : tenants.length === 0 ? (
+                            <div style={{ ...card, textAlign:'center', padding:'3rem', color:'var(--text-muted)' }}>
+                                <div style={{ fontSize:'2rem', marginBottom:'0.5rem' }}>🏢</div>
+                                <p style={{ fontWeight:700, margin:'0 0 0.25rem' }}>No agencies yet</p>
+                                <p style={{ fontSize:'0.85rem', margin:0 }}>Click "+ New Agency" to onboard your first client.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
+                                {tenants.map(t => (
+                                    <div key={t.id} style={{ ...card, display:'flex', alignItems:'center', gap:'1rem', opacity: t.active ? 1 : 0.6 }}>
+                                        <div style={{ flex:1, minWidth:0 }}>
+                                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.2rem', flexWrap:'wrap' }}>
+                                                <span style={{ fontWeight:800, fontSize:'0.95rem' }}>{t.name}</span>
+                                                <span style={badge(t.plan)}>{t.plan}</span>
+                                                {!t.active && <span style={badge('starter','#DC2626')}>inactive</span>}
+                                            </div>
+                                            <div style={{ fontSize:'0.8rem', color:'var(--text-muted)' }}>{t.email}</div>
+                                        </div>
+                                        <div style={{ textAlign:'right', minWidth:'90px' }}>
+                                            <div style={{ fontWeight:800, fontSize:'0.9rem' }}>{t.monthly_used} <span style={{ color:'var(--text-muted)', fontWeight:400 }}>/ {t.monthly_limit ?? '∞'}</span></div>
+                                            <div style={{ fontSize:'0.72rem', color:'var(--text-muted)' }}>this month</div>
+                                        </div>
+                                        <div style={{ display:'flex', gap:'0.4rem', flexShrink:0 }}>
+                                            <button onClick={() => setSelectedTenant(t)} style={btn('#374151')}>Manage →</button>
+                                            <button onClick={() => toggleTenant(t)} style={btn(t.active ? '#DC2626' : '#16A34A')}>{t.active ? 'Disable' : 'Enable'}</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )
+                    )}
+
+                    {/* Tenant Detail */}
+                    {selectedTenant && (
+                        <div>
+                            {/* Stats */}
+                            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.75rem', marginBottom:'1.25rem' }}>
+                                {[
+                                    { label:'Plan', render: () => <span style={badge(selectedTenant.plan)}>{selectedTenant.plan}</span> },
+                                    { label:'This Month', render: () => <span style={{ fontWeight:800 }}>{selectedTenant.monthly_used} / {selectedTenant.monthly_limit ?? '∞'}</span> },
+                                    { label:'Status', render: () => <span style={badge(null, selectedTenant.active ? '#16A34A' : '#DC2626')}>{selectedTenant.active ? 'Active' : 'Inactive'}</span> },
+                                ].map(({ label, render }) => (
+                                    <div key={label} style={{ ...card, textAlign:'center' }}>
+                                        <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginBottom:'0.4rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.05em' }}>{label}</div>
+                                        {render()}
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Tokens */}
+                            <div style={{ ...card, marginBottom:'1.25rem' }}>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1rem' }}>
+                                    <h3 style={{ fontWeight:800, fontSize:'0.95rem', margin:0 }}>Widget Tokens</h3>
+                                    <button onClick={() => setShowAddToken(v => !v)} style={{ ...btn('#0EA5E9', true) }}>+ New Token</button>
+                                </div>
+
+                                {showAddToken && (
+                                    <div style={{ marginBottom:'1rem', padding:'0.75rem', borderRadius:'8px', background:'#F0F9FF', border:'1px solid #BAE6FD' }}>
+                                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.5rem', marginBottom:'0.5rem' }}>
+                                            <div>
+                                                <label style={{ fontSize:'0.72rem', fontWeight:700, color:'var(--text-muted)', display:'block', marginBottom:'0.25rem' }}>Label</label>
+                                                <input value={tokenForm.label} onChange={e => setTokenForm(f=>({...f,label:e.target.value}))} placeholder="Main website"
+                                                    style={{ width:'100%', padding:'0.4rem 0.65rem', borderRadius:'7px', border:'1px solid #D1D5DB', fontSize:'0.83rem', fontFamily:'inherit', outline:'none', boxSizing:'border-box' }} />
+                                            </div>
+                                            <div>
+                                                <label style={{ fontSize:'0.72rem', fontWeight:700, color:'var(--text-muted)', display:'block', marginBottom:'0.25rem' }}>Allowed Origins (comma-separated, blank = any)</label>
+                                                <input value={tokenForm.origins} onChange={e => setTokenForm(f=>({...f,origins:e.target.value}))} placeholder="https://agency.com"
+                                                    style={{ width:'100%', padding:'0.4rem 0.65rem', borderRadius:'7px', border:'1px solid #D1D5DB', fontSize:'0.83rem', fontFamily:'inherit', outline:'none', boxSizing:'border-box' }} />
+                                            </div>
+                                        </div>
+                                        <div style={{ display:'flex', gap:'0.4rem', justifyContent:'flex-end' }}>
+                                            <button onClick={() => setShowAddToken(false)} style={btn()}>Cancel</button>
+                                            <button onClick={createToken} disabled={addingToken} style={btn('#0EA5E9', true)}>{addingToken ? 'Creating…' : 'Create'}</button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {loadingDetails ? <p style={{ color:'var(--text-muted)', fontSize:'0.85rem', margin:0 }}>Loading…</p>
+                                : tokens.length === 0 ? <p style={{ color:'var(--text-muted)', fontSize:'0.85rem', margin:0 }}>No tokens yet.</p>
+                                : (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:'0.6rem' }}>
+                                        {tokens.map(tok => (
+                                            <div key={tok.id} style={{ padding:'0.75rem', borderRadius:'8px', border:'1px solid #F3F4F6', background:'#FAFAFA', opacity: tok.active ? 1 : 0.55 }}>
+                                                <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.35rem' }}>
+                                                    <span style={{ fontWeight:800, fontSize:'0.85rem' }}>{tok.label || 'Website'}</span>
+                                                    {!tok.active && <span style={{ fontSize:'0.7rem', color:'#DC2626', fontWeight:800 }}>INACTIVE</span>}
+                                                    <span style={{ marginLeft:'auto', fontSize:'0.72rem', color:'var(--text-muted)' }}>
+                                                        {tok.last_used_at ? 'Last used ' + new Date(tok.last_used_at).toLocaleDateString() : 'Never used'}
+                                                    </span>
+                                                </div>
+                                                <div style={{ fontFamily:'monospace', fontSize:'0.75rem', color:'#6B7280', marginBottom:'0.45rem', wordBreak:'break-all' }}>{tok.token}</div>
+                                                {tok.allowed_origins?.length > 0 && (
+                                                    <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginBottom:'0.45rem' }}>Origins: {tok.allowed_origins.join(', ')}</div>
+                                                )}
+                                                <div style={{ display:'flex', gap:'0.4rem' }}>
+                                                    <button onClick={() => copyToken(tok)} style={btn(copiedId === 'tok_' + tok.id ? '#16A34A' : '#374151')}>
+                                                        {copiedId === 'tok_' + tok.id ? '✓ Copied' : 'Copy Token'}
+                                                    </button>
+                                                    <button onClick={() => copySnippet(tok)} style={btn(copiedId === 'snip_' + tok.id ? '#16A34A' : '#374151')}>
+                                                        {copiedId === 'snip_' + tok.id ? '✓ Copied!' : 'Copy Install Snippet'}
+                                                    </button>
+                                                    <button onClick={() => toggleToken(tok)} style={btn(tok.active ? '#DC2626' : '#16A34A')}>{tok.active ? 'Disable' : 'Enable'}</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Conversations */}
+                            <div style={card}>
+                                <h3 style={{ fontWeight:800, fontSize:'0.95rem', margin:'0 0 1rem' }}>
+                                    Conversations <span style={{ color:'var(--text-muted)', fontWeight:400 }}>({conversations.length})</span>
+                                </h3>
+                                {conversations.length === 0 ? (
+                                    <p style={{ color:'var(--text-muted)', fontSize:'0.85rem', margin:0 }}>No conversations yet.</p>
+                                ) : (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
+                                        {conversations.map(c => (
+                                            <div key={c.id} style={{ borderRadius:'8px', border:'1px solid #F3F4F6', overflow:'hidden' }}>
+                                                <div onClick={() => setExpandedConv(expandedConv === c.id ? null : c.id)}
+                                                    style={{ padding:'0.65rem 0.85rem', display:'flex', alignItems:'center', gap:'0.75rem', cursor:'pointer', background: expandedConv === c.id ? '#F0F9FF' : 'white' }}>
+                                                    <div style={{ flex:1, minWidth:0 }}>
+                                                        <div style={{ fontWeight:700, fontSize:'0.85rem' }}>
+                                                            {c.visitor_name || c.visitor_email
+                                                                ? <>{c.visitor_name || ''}{c.visitor_name && c.visitor_email ? <span style={{ color:'var(--text-muted)', fontWeight:400, fontSize:'0.78rem' }}> · {c.visitor_email}</span> : c.visitor_email || ''}</>
+                                                                : <span style={{ color:'var(--text-muted)', fontStyle:'italic' }}>Anonymous</span>}
+                                                        </div>
+                                                        <div style={{ fontSize:'0.72rem', color:'var(--text-muted)' }}>{new Date(c.created_at).toLocaleString()}</div>
+                                                    </div>
+                                                    <span style={{ fontSize:'0.75rem', color:'var(--text-muted)', flexShrink:0 }}>{(c.messages||[]).length} msgs</span>
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                                                        style={{ transform: expandedConv === c.id ? 'rotate(180deg)' : 'none', transition:'transform .2s', flexShrink:0 }}><polyline points="6 9 12 15 18 9"/></svg>
+                                                </div>
+                                                {expandedConv === c.id && (
+                                                    <div style={{ padding:'0.75rem', borderTop:'1px solid #F3F4F6', background:'#FAFAFA', display:'flex', flexDirection:'column', gap:'0.6rem', maxHeight:'300px', overflowY:'auto' }}>
+                                                        {(c.messages||[]).map((m, i) => (
+                                                            <div key={i} style={{ display:'flex', gap:'0.5rem', alignItems:'flex-start' }}>
+                                                                <span style={{ fontWeight:800, fontSize:'0.68rem', color: m.role === 'user' ? '#7C3AED' : '#0EA5E9', minWidth:'56px', paddingTop:'2px', textTransform:'uppercase', flexShrink:0 }}>{m.role}</span>
+                                                                <span style={{ fontSize:'0.83rem', lineHeight:'1.5', color:'#374151' }}>{m.content}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
