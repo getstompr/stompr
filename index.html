@@ -2140,7 +2140,7 @@
                             <button className={`tab ${activeTab === 'itinerary' ? 'active' : ''}`} onClick={() => setActiveTab('itinerary')}>My Itineraries</button>
                             <button className={`tab ${activeTab === 'places' ? 'active' : ''}`} onClick={() => setActiveTab('places')}>My World</button>
                             <button className={`tab ${activeTab === 'community' ? 'active' : ''}`} onClick={() => setActiveTab('community')}>My Community</button>
-                            {session.user.email === 'emeredit@chicagobooth.edu' && (
+                            {session.user.email === 'emilyfernes@gmail.com' && (
                                 <button className={`tab ${activeTab === 'admin' ? 'active' : ''}`} onClick={() => setActiveTab('admin')}>Agent Dashboard</button>
                             )}
                         </div>
@@ -2192,7 +2192,7 @@
                                 </div>
                             )}
 
-                            {activeTab === 'admin' && session.user.email === 'emeredit@chicagobooth.edu' && (
+                            {activeTab === 'admin' && session.user.email === 'emilyfernes@gmail.com' && (
                                 <AdminView session={session} />
                             )}
                             </div>
