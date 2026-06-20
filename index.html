@@ -1378,6 +1378,29 @@
                 try { return localStorage.getItem('stompr_active_tab') || 'ai'; } catch { return 'ai'; }
             });
             const [landingTab, setLandingTab] = useState('b2c');
+            const [agencyForm, setAgencyForm] = useState({ name: '', email: '', agency: '', website: '', plan: '' });
+            const [agencySubmitting, setAgencySubmitting] = useState(false);
+            const [agencySubmitted, setAgencySubmitted] = useState(false);
+
+            const submitAgencyRequest = async (e) => {
+                e.preventDefault();
+                setAgencySubmitting(true);
+                await supabaseClient.from('agency_requests').insert({
+                    name: agencyForm.name,
+                    email: agencyForm.email,
+                    agency: agencyForm.agency,
+                    website: agencyForm.website || null,
+                    plan: agencyForm.plan || null,
+                });
+                setAgencySubmitted(true);
+                setAgencySubmitting(false);
+            };
+
+            const scrollToAgencyForm = (plan) => {
+                if (plan) setAgencyForm(f => ({ ...f, plan }));
+                setTimeout(() => document.getElementById('agency-request-form')?.scrollIntoView({ behavior: 'smooth' }), 50);
+            };
+
             const [places, setPlaces] = useState([]);
             const [profile, setProfile] = useState(null);
             const [profilePic, setProfilePic] = useState('');
@@ -1751,7 +1774,8 @@
                                                         </li>
                                                     ))}
                                                 </ul>
-                                                <button style={{width:'100%', padding:'0.7rem', borderRadius:'10px', border: plan.highlight ? '2px solid rgba(255,255,255,0.4)' : '1.5px solid var(--primary)', background: plan.highlight ? 'rgba(255,255,255,0.15)' : 'transparent', color: plan.highlight ? '#fff' : 'var(--primary)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.9rem', cursor:'pointer', transition:'all 0.2s'}}
+                                                <button onClick={() => scrollToAgencyForm(plan.name.toLowerCase())}
+                                                    style={{width:'100%', padding:'0.7rem', borderRadius:'10px', border: plan.highlight ? '2px solid rgba(255,255,255,0.4)' : '1.5px solid var(--primary)', background: plan.highlight ? 'rgba(255,255,255,0.15)' : 'transparent', color: plan.highlight ? '#fff' : 'var(--primary)', fontFamily:'Inter, sans-serif', fontWeight:'700', fontSize:'0.9rem', cursor:'pointer', transition:'all 0.2s'}}
                                                     onMouseOver={e => { e.target.style.background = plan.highlight ? 'rgba(255,255,255,0.25)' : 'var(--primary)'; if(!plan.highlight) e.target.style.color='#fff'; }}
                                                     onMouseOut={e => { e.target.style.background = plan.highlight ? 'rgba(255,255,255,0.15)' : 'transparent'; if(!plan.highlight) e.target.style.color='var(--primary)'; }}>
                                                     {plan.name === 'Enterprise' ? 'Contact Sales' : 'Get Started'}
@@ -1761,17 +1785,64 @@
                                     </div>
                                 </div>
 
-                                {/* B2B CTA */}
-                                <div style={{textAlign:'center', padding:'2rem 1.5rem 3rem', borderTop:'1px solid var(--border)'}}>
-                                    <h2 style={{fontSize:'1.5rem', fontWeight:'800', color:'var(--text)', marginBottom:'0.75rem'}}>Ready to upgrade your agency?</h2>
-                                    <p style={{color:'var(--text-muted)', fontSize:'0.95rem', marginBottom:'1.5rem'}}>Get set up in under 10 minutes. No technical expertise needed.</p>
-                                    <div style={{display:'flex', gap:'1rem', justifyContent:'center', flexWrap:'wrap'}}>
-                                        <button className="btn btn-primary" style={{borderRadius:'28px', padding:'0.85rem 2.5rem', fontSize:'1.05rem', fontWeight:'700'}}>
-                                            Start Free Trial
-                                        </button>
-                                        <button style={{borderRadius:'28px', padding:'0.85rem 2rem', fontSize:'1.05rem', fontWeight:'600', background:'none', border:'2px solid var(--border)', color:'var(--text)', cursor:'pointer', fontFamily:'Inter, sans-serif'}}>
-                                            Book a Demo
-                                        </button>
+                                {/* B2B Request Form */}
+                                <div id="agency-request-form" style={{padding:'2.5rem 1.5rem 3rem', borderTop:'1px solid var(--border)'}}>
+                                    <div style={{maxWidth:'520px', margin:'0 auto'}}>
+                                        <h2 style={{fontSize:'1.5rem', fontWeight:'800', color:'var(--text)', marginBottom:'0.4rem', textAlign:'center'}}>Get started today</h2>
+                                        <p style={{color:'var(--text-muted)', fontSize:'0.9rem', marginBottom:'2rem', textAlign:'center'}}>Tell us about your agency and we'll have you set up within 24 hours.</p>
+
+                                        {agencySubmitted ? (
+                                            <div style={{textAlign:'center', padding:'2.5rem', background:'var(--surface)', borderRadius:'16px', border:'1px solid var(--border)'}}>
+                                                <div style={{fontSize:'2.5rem', marginBottom:'0.75rem'}}>✅</div>
+                                                <h3 style={{fontWeight:'800', margin:'0 0 0.5rem', color:'var(--text)'}}>Request received!</h3>
+                                                <p style={{color:'var(--text-muted)', fontSize:'0.9rem', margin:0}}>We'll reach out within 24 hours to get you set up.</p>
+                                            </div>
+                                        ) : (
+                                            <form onSubmit={submitAgencyRequest} style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+                                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+                                                    <div>
+                                                        <label style={{display:'block', fontSize:'0.78rem', fontWeight:'600', color:'var(--text-muted)', marginBottom:'0.3rem'}}>Your Name</label>
+                                                        <input required value={agencyForm.name} onChange={e => setAgencyForm(f=>({...f,name:e.target.value}))}
+                                                            placeholder="Jane Smith"
+                                                            style={{width:'100%', padding:'0.6rem 0.85rem', borderRadius:'10px', border:'1.5px solid var(--border)', fontSize:'0.9rem', fontFamily:'Inter, sans-serif', outline:'none', boxSizing:'border-box', background:'var(--surface)', color:'var(--text)'}} />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{display:'block', fontSize:'0.78rem', fontWeight:'600', color:'var(--text-muted)', marginBottom:'0.3rem'}}>Email</label>
+                                                        <input required type="email" value={agencyForm.email} onChange={e => setAgencyForm(f=>({...f,email:e.target.value}))}
+                                                            placeholder="jane@agency.com"
+                                                            style={{width:'100%', padding:'0.6rem 0.85rem', borderRadius:'10px', border:'1.5px solid var(--border)', fontSize:'0.9rem', fontFamily:'Inter, sans-serif', outline:'none', boxSizing:'border-box', background:'var(--surface)', color:'var(--text)'}} />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label style={{display:'block', fontSize:'0.78rem', fontWeight:'600', color:'var(--text-muted)', marginBottom:'0.3rem'}}>Agency Name</label>
+                                                    <input required value={agencyForm.agency} onChange={e => setAgencyForm(f=>({...f,agency:e.target.value}))}
+                                                        placeholder="Sunshine Travel Co."
+                                                        style={{width:'100%', padding:'0.6rem 0.85rem', borderRadius:'10px', border:'1.5px solid var(--border)', fontSize:'0.9rem', fontFamily:'Inter, sans-serif', outline:'none', boxSizing:'border-box', background:'var(--surface)', color:'var(--text)'}} />
+                                                </div>
+                                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+                                                    <div>
+                                                        <label style={{display:'block', fontSize:'0.78rem', fontWeight:'600', color:'var(--text-muted)', marginBottom:'0.3rem'}}>Website (optional)</label>
+                                                        <input value={agencyForm.website} onChange={e => setAgencyForm(f=>({...f,website:e.target.value}))}
+                                                            placeholder="https://agency.com"
+                                                            style={{width:'100%', padding:'0.6rem 0.85rem', borderRadius:'10px', border:'1.5px solid var(--border)', fontSize:'0.9rem', fontFamily:'Inter, sans-serif', outline:'none', boxSizing:'border-box', background:'var(--surface)', color:'var(--text)'}} />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{display:'block', fontSize:'0.78rem', fontWeight:'600', color:'var(--text-muted)', marginBottom:'0.3rem'}}>Plan Interest</label>
+                                                        <select value={agencyForm.plan} onChange={e => setAgencyForm(f=>({...f,plan:e.target.value}))}
+                                                            style={{width:'100%', padding:'0.6rem 0.85rem', borderRadius:'10px', border:'1.5px solid var(--border)', fontSize:'0.9rem', fontFamily:'Inter, sans-serif', outline:'none', background:'var(--surface)', color:'var(--text)', cursor:'pointer'}}>
+                                                            <option value="">Not sure yet</option>
+                                                            <option value="starter">Starter — $49/mo</option>
+                                                            <option value="agency">Agency — $149/mo</option>
+                                                            <option value="enterprise">Enterprise</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <button type="submit" disabled={agencySubmitting} className="btn btn-primary"
+                                                    style={{borderRadius:'10px', padding:'0.75rem', fontSize:'0.95rem', fontWeight:'700', marginTop:'0.25rem'}}>
+                                                    {agencySubmitting ? 'Sending…' : 'Request Access →'}
+                                                </button>
+                                            </form>
+                                        )}
                                     </div>
                                 </div>
                             </>
@@ -2212,6 +2283,8 @@
             const [tokens, setTokens] = useState([]);
             const [conversations, setConversations] = useState([]);
             const [loadingTenants, setLoadingTenants] = useState(true);
+            const [requests, setRequests] = useState([]);
+            const [showRequests, setShowRequests] = useState(true);
             const [loadingDetails, setLoadingDetails] = useState(false);
 
             const [showAddTenant, setShowAddTenant] = useState(false);
@@ -2230,7 +2303,7 @@
             const [savingPrompt, setSavingPrompt] = useState(false);
             const [promptSaved, setPromptSaved] = useState(false);
 
-            useEffect(() => { loadTenants(); }, []);
+            useEffect(() => { loadTenants(); loadRequests(); }, []);
 
             useEffect(() => {
                 if (selectedTenant) {
@@ -2246,6 +2319,16 @@
                 const { data } = await supabaseClient.from('tenants').select('*').order('created_at', { ascending: false });
                 setTenants(data || []);
                 setLoadingTenants(false);
+            };
+
+            const loadRequests = async () => {
+                const { data } = await supabaseClient.from('agency_requests').select('*').order('created_at', { ascending: false });
+                setRequests(data || []);
+            };
+
+            const dismissRequest = async (id) => {
+                await supabaseClient.from('agency_requests').update({ dismissed: true }).eq('id', id);
+                setRequests(prev => prev.filter(r => r.id !== id));
             };
 
             const loadTokens = async (tenantId) => {
@@ -2372,6 +2455,47 @@
                                     {addingTenant ? 'Creating…' : 'Create Agency'}
                                 </button>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Requests Panel */}
+                    {!selectedTenant && requests.length > 0 && (
+                        <div style={{ ...card, marginBottom:'1.25rem', border:'1px solid #FDE68A', background:'#FFFBEB' }}>
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: showRequests ? '1rem' : 0 }}>
+                                <h3 style={{ fontWeight:800, fontSize:'0.95rem', margin:0 }}>
+                                    🔔 New Requests <span style={{ background:'#F59E0B', color:'white', borderRadius:'99px', padding:'1px 8px', fontSize:'0.72rem', marginLeft:'0.4rem' }}>{requests.length}</span>
+                                </h3>
+                                <button onClick={() => setShowRequests(v => !v)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', fontWeight:700, fontSize:'0.8rem', fontFamily:'inherit' }}>
+                                    {showRequests ? 'Hide' : 'Show'}
+                                </button>
+                            </div>
+                            {showRequests && (
+                                <div style={{ display:'flex', flexDirection:'column', gap:'0.6rem' }}>
+                                    {requests.map(r => (
+                                        <div key={r.id} style={{ padding:'0.75rem', borderRadius:'8px', background:'white', border:'1px solid #FDE68A', display:'flex', alignItems:'flex-start', gap:'1rem' }}>
+                                            <div style={{ flex:1, minWidth:0 }}>
+                                                <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap', marginBottom:'0.2rem' }}>
+                                                    <span style={{ fontWeight:800, fontSize:'0.9rem' }}>{r.agency}</span>
+                                                    {r.plan && <span style={{ fontSize:'0.7rem', fontWeight:700, background:'#E0F2FE', color:'#0284C7', padding:'1px 7px', borderRadius:'99px' }}>{r.plan}</span>}
+                                                </div>
+                                                <div style={{ fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:'0.1rem' }}>{r.name} · <a href={`mailto:${r.email}`} style={{ color:'#0EA5E9' }}>{r.email}</a></div>
+                                                {r.website && <div style={{ fontSize:'0.75rem', color:'var(--text-muted)' }}>{r.website}</div>}
+                                                <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'0.25rem' }}>{new Date(r.created_at).toLocaleString()}</div>
+                                            </div>
+                                            <div style={{ display:'flex', gap:'0.4rem', flexShrink:0 }}>
+                                                <a href={`mailto:${r.email}?subject=Welcome to Stompr Widget&body=Hi ${r.name},%0A%0AThanks for your interest in the Stompr AI widget for ${r.agency}!`}
+                                                    style={{ padding:'0.3rem 0.65rem', borderRadius:'7px', border:'none', background:'#0EA5E9', color:'white', fontWeight:700, fontSize:'0.75rem', textDecoration:'none' }}>
+                                                    Reply
+                                                </a>
+                                                <button onClick={() => dismissRequest(r.id)}
+                                                    style={{ padding:'0.3rem 0.65rem', borderRadius:'7px', border:'1px solid #E5E7EB', background:'white', cursor:'pointer', fontWeight:700, fontSize:'0.75rem', color:'#6B7280', fontFamily:'inherit' }}>
+                                                    Dismiss
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 
