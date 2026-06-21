@@ -224,8 +224,12 @@
     const typing = addBotMessage('…', true);
 
     try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20000);
+
       const res = await fetch(`${API_BASE}/widget-chat`, {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'x-widget-token': WIDGET_TOKEN,
@@ -239,21 +243,24 @@
         }),
       });
 
+      clearTimeout(timer);
       const data = await res.json();
       typing.remove();
 
       if (!res.ok) {
         addBotMessage(data.error === 'Monthly conversation limit reached'
           ? 'Sorry, we\'ve reached our monthly limit. Please contact us directly!'
-          : 'Sorry, something went wrong. Please try again.');
+          : `Error ${res.status}: ${data.error || 'Something went wrong.'}`);
       } else {
         history.push({ role: 'user', content: text });
         history.push({ role: 'assistant', content: data.reply });
         addBotMessage(data.reply);
       }
-    } catch {
+    } catch (err) {
       typing.remove();
-      addBotMessage('Connection error. Please check your internet and try again.');
+      addBotMessage(err.name === 'AbortError'
+        ? 'Request timed out — please try again.'
+        : `Error: ${err.message || 'Connection failed.'}`);
     }
 
     sendBtn.disabled = false;
