@@ -145,7 +145,7 @@
     <div id="messages"></div>
 
     <div id="lead-form">
-      <p>Want an agent to follow up? Leave your details:</p>
+      <p>Want the full itinerary with hotel picks & pricing? Leave your details:</p>
       <input id="lead-name"  type="text"  placeholder="Your name"  />
       <input id="lead-email" type="email" placeholder="Your email" />
       <button id="lead-btn">Send to an agent →</button>
@@ -181,7 +181,7 @@
     panel.classList.toggle('hidden', !open);
     launcher.textContent = open ? '✕' : '✈️';
     if (open && messages.children.length === 0) addBotMessage(
-      `Hi there! 👋 I'm your AI travel concierge from ${BRAND_NAME}. Where are you dreaming of going?`
+      `Hi there! 👋 I'm your AI travel concierge from ${BRAND_NAME}. Tell me where you're dreaming of going and I'll put together a personalized itinerary preview for you.`
     );
     if (open) textarea.focus();
   });
@@ -203,7 +203,7 @@
     visitorEmail = em;
     leadCaptured = true;
     leadForm.style.display = 'none';
-    addBotMessage("Thanks! An agent will be in touch soon. Anything else I can help with?");
+    addBotMessage("Perfect! A travel specialist will send you the complete itinerary with hotel picks and pricing. In the meantime, any other questions about your trip?");
   });
 
   async function send() {
@@ -216,8 +216,8 @@
     addUserMessage(text);
     msgCount++;
 
-    // Show lead capture form after 3 messages if not yet captured
-    if (msgCount === 3 && !leadCaptured) {
+    // Show lead capture form after 5 messages (enough for teaser to appear)
+    if (msgCount === 5 && !leadCaptured) {
       leadForm.style.display = 'block';
     }
 
