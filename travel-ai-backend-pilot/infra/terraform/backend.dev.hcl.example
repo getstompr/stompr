@@ -1,0 +1,9 @@
+﻿terraform {
+  backend "s3" {
+    bucket         = "replace-terraform-state-bucket"
+    key            = "travel-ai/dev/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "replace-terraform-locks"
+    encrypt        = true
+  }
+}
